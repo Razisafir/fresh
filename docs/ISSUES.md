@@ -68,8 +68,8 @@ This document tracks every issue carried over from the old repo (Kovix_2.0) plus
 
 ### R-008 — Agent panel first-launch is unreliable (`openView` doesn't expand auxiliary bar)
 **Source:** `00_OLD_REPO_STATE.md` "What's Stub" #6
-**Status:** WILL BE RESOLVED in Round 2D (agent panel webview)
-**Evidence:** The agent panel doesn't exist yet — it's the Round 2D deliverable. When it lands, it will use `WebviewViewProvider` (not `openView`) per D-012.
+**Status:** RESOLVED in Round 2D (see R-016)
+**Evidence:** The agent panel landed in Round 2D as `src/ui/agentPanel.ts` using `WebviewViewProvider` (not `openView`) per D-012. The `focus()` method falls back to the built-in `${viewId}.focus` command when the view isn't yet resolved, then calls `view.show(true)` once it is. Both fallback paths are unit-tested in `test/unit/ui/agentPanel.test.ts` ("falls back to the built-in focus command when the view is not yet resolved" + "calls view.show(true) when the view is already resolved"). See R-016 for the full Round 2D deliverable.
 
 ### R-009 — `commandBlocklist.ts` regex compilation failure (CRITICAL — found in test-audit)
 **Source:** Round 2C security audit (Bug 1 in `SECURITY_AUDIT.md`)
@@ -172,21 +172,53 @@ The 8 DEFERRED issues above remain scheduled for v1.0-beta / v1.0 / v1.0-rc per 
 
 ## Quality Pass Results
 
-The following quality checks were performed during the Round 2C test-audit and re-verified at the end of Round 2D:
+The following quality checks were performed during the Round 2C test-audit, re-verified at the end of Round 2D, and re-verified again after the Round 2D-post ESLint hardening pass.
 
 ### TypeScript Strict Mode — PASS
 `npx tsc -p tsconfig.json --noEmit` returns 0 errors with all strict flags enabled (`strict`, `noImplicitAny`, `strictNullChecks`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noFallthroughCasesInSwitch`).
 
+### ESLint — PASS (0 errors, 0 warnings)
+
+**Added in the post-Round 2D hardening pass.** The previous "Quality Pass Results" section claimed `no-eval`, `no-new-func`, and `no child_process.exec/execSync` invariants held based on manual inspection only — that was a gap. ESLint is now wired up mechanically:
+
+- **Config:** `eslint.config.mjs` (flat config, ESLint v9+). Uses `@eslint/js` recommended + `typescript-eslint` recommended as the base. No style-opinion rules (no airbnb, no indentation enforcement).
+- **Security rules (error-level):**
+  - `no-eval` — backs up the "no dynamic code execution" claim
+  - `no-new-func` — same
+  - `no-restricted-imports` blocking `exec` / `execSync` from `child_process` (SEC-3, SEC-7)
+  - `no-restricted-syntax` blocking `child_process.exec(...)` and `child_process.execSync(...)` call forms (defence-in-depth in case someone bypasses the import restriction via namespace import)
+- **Quality rules (error-level):**
+  - `@typescript-eslint/no-unused-vars` with `argsIgnorePattern: '^_'` (TS files)
+  - `no-unused-vars` with the same pattern (JS files)
+- **Test override:** `@typescript-eslint/no-unused-expressions` disabled in `test/**/*.ts` (chai's `expect(x).to.be.true;` pattern is a well-known false positive).
+- **Script:** `"lint": "eslint ."` in `package.json`.
+- **devDependencies added:** `eslint@^9.18.0`, `@eslint/js@^9.18.0`, `typescript-eslint@^8.20.0`, `globals@^15.14.0`.
+
+**Findings surfaced by the first lint run (148 problems) and how they were resolved:**
+
+1. `src/terminal/terminalExecutor.ts:50` — `import * as child_process from 'child_process'` triggered `no-restricted-imports` (namespace import allowed access to `child_process.exec`). **Fixed** by switching to `import { spawn } from 'child_process'` (the only function actually used).
+2. `src/agent/promptSanitizer.ts:67` — `no-control-regex` fired on `/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g`. **False positive** — the regex intentionally matches control chars to STRIP them from user input (security function). Added scoped `// eslint-disable-next-line no-control-regex` with explanatory comment.
+3. `src/security/urlGuard.ts:194` — `headers` declared but never used. **Intentional** — destructuring strips headers on redirect (SSRF defence: prevents `Authorization` leaking to a redirected host). Renamed to `_headers` to match the unused-var ignore pattern + added explanatory comment.
+4. `src/ui/agentPanel.ts:924` — `require('node:crypto')` triggered `@typescript-eslint/no-require-imports`. **Fixed** by replacing with a top-of-file ESM `import { randomBytes } from 'node:crypto'`.
+5. `src/ui/webview/agentPanel.js:69` — `_state` param triggered `no-unused-vars` (the JS base rule didn't have the `^_` ignore pattern). **Fixed** by tightening the base config to match the TS rule.
+6. 5 stale `eslint-disable` comments in `webFetch.ts`, `agentPanel.js`, `vscode-shim.ts` — for rules that weren't enabled (`no-console`, `no-new`). **Fixed** by removing the comments.
+7. 130+ `@typescript-eslint/no-unused-expressions` errors in test files — chai false positives. **Fixed** by disabling the rule in the test override block.
+
+**Final state:** `npm run lint` exits 0 with zero output.
+
 ### esbuild Bundle — PASS
-`npx esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node18` produces a 153.2 KB bundle (up from 127.5 KB after Round 2C, due to the Round 2D agent panel provider + webview asset wiring).
+`npx esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node18` produces a 153.2 KB bundle (unchanged from Round 2D; the ESLint hardening pass modified only import forms and comments, no behavioral changes).
 
 ### npm audit — PASS (0 vulnerabilities)
-All dev dependencies updated to latest stable. `mocha@11.7.6`, `chai@5.3.3`, `ts-node@10.9.2`, `esbuild@0.25.12`. Overrides in `package.json` force `serialize-javascript@^7.0.6` and `diff@^9.0.0` to clear transitive vulnerabilities.
+All dev dependencies updated to latest stable. `mocha@11.7.6`, `chai@^5.3.3`, `ts-node@10.9.2`, `esbuild@0.25.12`, `eslint@9.39.4`, `typescript-eslint@8.62.0`. Overrides in `package.json` force `serialize-javascript@^7.0.6` and `diff@^9.0.0` to clear transitive vulnerabilities.
 
-### Dead Code / Unused Exports — PASS
-- The old `commandBlocklist.SECRET_LOG_PATTERNS` array (250 lines of duplicated patterns) was removed when `sanitiseForAuditLog` was unified with `redactSecrets`.
-- `validateToolName` allowlist was updated to remove references to dropped tools.
-- No `eval`, `new Function`, `child_process.exec`, `execSync`, `dangerouslySetInnerHTML` calls in src/.
+### Test Infrastructure — PASS (post-hardening fix)
+
+**Pre-existing infra issues found and fixed during the ESLint hardening pass:**
+
+1. **Node 24 native TypeScript strip-only mode** was preempting `ts-node/register` for `.ts` files, causing `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on parameter properties (`constructor(private results: ...)`). **Fixed** by adding `cross-env NODE_OPTIONS=--no-experimental-strip-types` to the `test`, `test:unit`, and `test:integration` npm scripts.
+2. **Missing `vscode` module shim** — the test suite relied on a manually-created `node_modules/vscode/index.js` file that `npm install` would silently prune (not in `package.json`). **Fixed** by adding `test/_setup/vscode-shim.cjs` (plain JS, no TS) + `test/_setup/vscode-shim-register.cjs` (hooks `Module._resolveFilename` to redirect `require('vscode')` to the shim). `.mocharc.json` requires the register file BEFORE `ts-node/register`. Self-contained: survives `npm install` / `npm ci` on any machine, no postinstall script needed.
+3. **Missing surface area in the shim** — `Uri.joinPath`, `window.registerWebviewViewProvider`, `window.onDidChangeActiveColorTheme`, `window.showTextDocument`, `window.withProgress`, `workspace.openTextDocument`, `workspace.fs.readDirectory/createDirectory/delete`. **Added** to `vscode-shim.cjs`.
 
 ### JSDoc Coverage — PASS
 All public APIs (exported functions / classes / interfaces) have JSDoc comments. The security-critical functions (`assertWithinWorkspace`, `sanitise`, `redactSecrets`, `assertSafeUrl`, `safeFetch`, `buildChildEnv`, `isBlockedCommand`, `isInterpreterCommand`, `detectShellMetacharInArgs`) have detailed JSDoc explaining the threat model + the fix history.

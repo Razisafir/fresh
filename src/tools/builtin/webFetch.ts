@@ -87,7 +87,6 @@ export const executeWebFetch: ToolExecuteFn = async (input, signal) => {
         // Validate URL format up front (safeFetch also validates, but a clearer
         // error message here helps the agent re-plan).
         try {
-                // eslint-disable-next-line no-new
                 new URL(url);
         } catch {
                 return {

@@ -58,11 +58,9 @@ const vscode = (function () {
     return acquireVsCodeApi();
   }
   // Test harness / preview outside VS Code: return a noop stub.
-  // eslint-disable-next-line no-console
   console.warn('[kovix] acquireVsCodeApi not available — running in stub mode.');
   return {
     postMessage(msg) {
-      // eslint-disable-next-line no-console
       console.log('[kovix:outbound]', msg);
     },
     getState() { return null; },
@@ -281,7 +279,6 @@ function handleMessage(msg) {
     case 'error':                 return onError(msg.text, msg.recoverable);
     case 'cleared':               return onCleared();
     default:
-      // eslint-disable-next-line no-console
       console.warn('[kovix] Unknown message type:', msg.type, msg);
   }
 }

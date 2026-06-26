@@ -35,6 +35,7 @@
  * (pending changes gate).
  */
 
+import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import { logger } from '../util/logger';
 import { getAgentLoop } from '../agent/agentLoop';
@@ -921,6 +922,5 @@ export class AgentPanelViewProvider implements vscode.WebviewViewProvider, vscod
  * Used in the script-src CSP directive.
  */
 function getNonce(): string {
-        const { randomBytes } = require('node:crypto') as typeof import('node:crypto');
         return randomBytes(16).toString('base64');
 }
