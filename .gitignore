@@ -1,0 +1,30 @@
+# Node / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+out/
+*.vsix
+*.tsbuildinfo
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+test-results/
+coverage/
+.nyc_output/
+
+# Local env (never commit)
+.env
+.env.local
+.envrc
+
+# Lockfiles we keep; uncomment the next line to ignore lockfile changes
+# package-lock.json

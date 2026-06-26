@@ -41,9 +41,9 @@ Kovix is an AI-native development environment (VS Code / Code-OSS fork with an a
 ## SDLC phase status
 
 - [x] Phase 0 — Repos cloned, fresh initialized, old repo audited (`docs/00_OLD_REPO_STATE.md` + `docs/00_FILE_SUMMARIES.md`).
-- [x] Phase 1 — Discovery & Requirements complete (`docs/01_REQUIREMENTS.md` + `docs/DECISIONS.md` started). User interview conducted. 4 open questions (OQ-1 through OQ-4) await user answers before Phase 2 can fully begin — but M1-M6 architecture work can proceed in parallel.
-- [ ] Phase 2 — Architecture & Planning (next).
-- [ ] Phase 3 — Source Audit & Migration.
+- [x] Phase 1 — Discovery & Requirements complete (`docs/01_REQUIREMENTS.md` v1.1 + `docs/DECISIONS.md` through D-011).
+- [x] Phase 2 — Architecture & Planning complete (`docs/02_ARCHITECTURE.md` + `docs/02a_ARCH_CHOICE_MATRIX.md`). Base architecture locked to VS Code extension per D-011 (supersedes D-004 fork decision).
+- [ ] Phase 3 — Source Audit & Migration (IN PROGRESS, Round 2B of N complete — see `docs/03_MIGRATION_LOG.md`). Round 2B ported the tool registry singleton + 7 v0.1 built-in tools (read_file, write_file, list_directory, edit_file, run_command, search_code, web_fetch) + the terminal executor + command blocklist. Round 2C target: the agent loop service (the crown jewel).
 - [ ] Phase 4 — Implementation.
 - [ ] Phase 5 — Testing & Verification.
 - [ ] Phase 6 — Packaging & Deployment.
@@ -59,4 +59,4 @@ Never copy any file containing real keys, tokens, or `.env`-style values into `f
 
 ## Licensing note
 
-The old repo is marked "Proprietary" license on a Code-OSS (MIT) base. If we keep Code-OSS as the base for `fresh`, we must carry forward `NOTICE.md` and `ThirdPartyNotices.txt` attribution. If we move off Code-OSS (e.g. build Kovix as a VS Code extension instead of a fork), the obligations change — this is a Phase 2 decision, not a default.
+Per D-011, `fresh` is built as a VS Code extension (NOT a Code-OSS fork). The old repo's "Proprietary on MIT base" licensing chain doesn't apply to our source — we don't redistribute Code-OSS. The extension's own license is a separate decision (D-014, to be logged before `LICENSE.txt` is finalized). Lead recommendation under D-011: MIT for the extension itself. The `LICENSE.txt` file in `fresh/` is currently a placeholder pending D-014.
