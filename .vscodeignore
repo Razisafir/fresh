@@ -1,0 +1,64 @@
+# ============================================================
+# .vscodeignore — what vsce EXCLUDES from the .vsix package
+# ============================================================
+# Anything not listed here gets packaged. The goal: ship ONLY what
+# the runtime needs, nothing else. Reviewers can run `vsce ls` to
+# see the final manifest.
+#
+# Pattern reference:
+#   https://code.visualstudio.com/api/working-with-extensions/publishing-extension#vscodeignore
+#
+
+# ---- Source code (the .vsix ships the compiled bundle, not TS) ----
+src/
+test/
+esbuild.config.js
+tsconfig.json
+tsconfig.test.json
+
+# ---- Build tooling / config ----
+scripts/
+.github/
+.editorconfig
+.gitignore
+.gitattributes
+.mocharc.json
+eslint.config.mjs
+
+# ---- Documentation (kept in repo, not shipped to users) ----
+docs/
+AGENTS.md
+worklog.md
+
+# ---- Dependency metadata ----
+node_modules/**/*.md
+node_modules/**/*.map
+node_modules/**/*.ts
+node_modules/**/package-lock.json
+node_modules/**/.npmignore
+node_modules/**/LICENSE
+node_modules/**/README*
+node_modules/**/test/
+node_modules/**/tests/
+node_modules/**/__tests__/
+node_modules/**/coverage/
+node_modules/**/.bin/
+
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# ---- Build artifacts that should never ship ----
+**/*.tsbuildinfo
+dist/.tsbuildinfo
+dist/.tsbuildinfo.test
+out/
+coverage/
+test-results/
+.nyc_output/
+
+# ---- Do NOT ignore dist/ — that's where extension.js lives ----
+# (intentionally not listed)
