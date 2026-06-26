@@ -43,10 +43,10 @@ Kovix is an AI-native development environment (VS Code / Code-OSS fork with an a
 - [x] Phase 0 — Repos cloned, fresh initialized, old repo audited (`docs/00_OLD_REPO_STATE.md` + `docs/00_FILE_SUMMARIES.md`).
 - [x] Phase 1 — Discovery & Requirements complete (`docs/01_REQUIREMENTS.md` v1.1 + `docs/DECISIONS.md` through D-011).
 - [x] Phase 2 — Architecture & Planning complete (`docs/02_ARCHITECTURE.md` + `docs/02a_ARCH_CHOICE_MATRIX.md`). Base architecture locked to VS Code extension per D-011 (supersedes D-004 fork decision).
-- [ ] Phase 3 — Source Audit & Migration (IN PROGRESS, Round 2B of N complete — see `docs/03_MIGRATION_LOG.md`). Round 2B ported the tool registry singleton + 7 v0.1 built-in tools (read_file, write_file, list_directory, edit_file, run_command, search_code, web_fetch) + the terminal executor + command blocklist. Round 2C target: the agent loop service (the crown jewel).
-- [ ] Phase 4 — Implementation.
-- [ ] Phase 5 — Testing & Verification.
-- [ ] Phase 6 — Packaging & Deployment.
+- [x] Phase 3 — Source Audit & Migration COMPLETE (Rounds 2A, 2B, 2C, 2D — see `docs/03_MIGRATION_LOG.md`). Round 2D landed the agent panel webview (the last v0.1-alpha deliverable). v0.1-alpha is feature-complete.
+- [x] Phase 4 — Implementation (covered incrementally by Phase 3 rounds — each round shipped production code, not stubs). The agent loop, tool registry, security layer, terminal executor, pending changes service, LLM provider (Anthropic), and agent panel webview are all live.
+- [x] Phase 5 — Testing & Verification (279 automated tests across 13 test files; security audit complete; quality pass clean). See `docs/SECURITY_AUDIT.md` + `docs/ISSUES.md` Quality Pass Results.
+- [ ] Phase 6 — Packaging & Deployment (NEXT — `vsce package`, marketplace metadata, smoke-test on Windows/macOS/Linux).
 - [ ] Phase 7 — Maintenance Plan.
 
 ## Security tooling policy

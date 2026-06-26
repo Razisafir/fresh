@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  agentPanel.html — Kovix agent chat webview shell.
+
+  Round 2D deliverable. This file is loaded by WebviewViewProvider in
+  src/ui/agentPanel.ts. The HTML is intentionally minimal — all behaviour
+  is wired up by agentPanel.js, which subscribes to messages from the
+  extension host and re-renders the DOM.
+
+  CSP: the provider injects a strict Content Security Policy that allows
+  only inline styles and scripts loaded from the webview's own origin
+  (via a nonce). See agentPanel.ts `_buildHtml()` for the actual CSP.
+
+  No external resources. No CDN. No fonts loaded over the network. The
+  webview is fully offline.
+
+  Per D-013, dark-first. Per D-012, this is the ONLY UI surface in v0.1.
+-->
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+  <title>Kovix Agent</title>
+  <style id="kovix-theme-tokens">
+    /* Injected at runtime by the provider — placeholder here so the
+       initial paint has the dark tokens before JS runs. The provider
+       overrides this with the full token block from agentPanel.css. */
+  </style>
+</head>
+<body>
+  <div class="kovix-root" id="kovix-root">
+
+    <!-- ----------------------------------------------------------------
+         Panel header — brand mark + clear / settings actions.
+         ---------------------------------------------------------------- -->
+    <header class="panel-header" role="banner">
+      <div class="title">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <span>Kovix</span>
+      </div>
+      <div class="actions">
+        <button
+          type="button"
+          class="action-button"
+          id="action-clear"
+          title="Clear conversation"
+          aria-label="Clear conversation"
+        >
+          <!-- trash icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+            <path d="M10 11v6" />
+            <path d="M14 11v6" />
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="action-button"
+          id="action-settings"
+          title="Manage API keys"
+          aria-label="Manage API keys"
+        >
+          <!-- gear icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ----------------------------------------------------------------
+         Milestone pause banner — shown when milestone_paused fires.
+         Hidden by default.
+         ---------------------------------------------------------------- -->
+    <div
+      class="milestone-banner"
+      id="milestone-banner"
+      role="alert"
+      aria-live="assertive"
+      hidden
+    >
+      <span class="pause-icon" aria-hidden="true">⏸</span>
+      <span class="milestone-label" id="milestone-label">Paused at milestone</span>
+      <div class="banner-actions">
+        <button type="button" class="resume-button" id="milestone-resume">Resume</button>
+        <button type="button" class="skip-button" id="milestone-skip">Skip</button>
+        <button type="button" class="abort-button" id="milestone-abort">Abort</button>
+      </div>
+    </div>
+
+    <!-- ----------------------------------------------------------------
+         Message list — chat transcript. Auto-scrolls to bottom.
+         ---------------------------------------------------------------- -->
+    <main class="message-list" id="message-list" role="log" aria-live="polite" aria-label="Kovix conversation">
+
+      <!-- Empty state — shown until the first message arrives -->
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h7M5 12l4-4M5 12l4 4" />
+            <path d="M12 6 Q19 9 19 12 Q19 15 12 18" />
+          </svg>
+        </div>
+        <div class="empty-title">Ask Kovix to build something</div>
+        <div class="empty-subtitle">
+          Describe a task and the agent will plan, ask for approval, then
+          execute with the right tools. Files it writes are staged for
+          your review.
+        </div>
+      </div>
+
+      <!-- Messages are appended here by agentPanel.js -->
+    </main>
+
+    <!-- ----------------------------------------------------------------
+         Pending changes section — collapsible. Hidden until a
+         file_written event arrives.
+         ---------------------------------------------------------------- -->
+    <section class="pending-section collapsed" id="pending-section" aria-label="Pending changes" hidden>
+      <div class="pending-header" id="pending-header" role="button" tabindex="0" aria-expanded="false">
+        <span class="chevron" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </span>
+        <span class="pending-label">Pending Changes</span>
+        <span class="pending-count" id="pending-count">0</span>
+      </div>
+      <div class="pending-list" id="pending-list">
+        <!-- Pending entries appended here -->
+      </div>
+    </section>
+
+    <!-- ----------------------------------------------------------------
+         Input area — textarea + send button.
+         Send button toggles to a Stop button while the agent is running.
+         ---------------------------------------------------------------- -->
+    <footer class="input-area" role="contentinfo">
+      <div class="input-wrapper" id="input-wrapper">
+        <textarea
+          id="input-textarea"
+          rows="1"
+          placeholder="Ask Kovix to build, edit, or explain something…"
+          aria-label="Task input"
+          autocomplete="off"
+          spellcheck="true"
+        ></textarea>
+        <button
+          type="button"
+          class="send-button"
+          id="send-button"
+          aria-label="Send task"
+          disabled
+        >
+          <!-- Send icon (up arrow) -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="19" x2="12" y2="5" />
+            <polyline points="5 12 12 5 19 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="input-meta">
+        <span><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline</span>
+        <span id="agent-status">Idle</span>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- The provider injects the CSS + JS via webview.html() with the
+       correct nonce + webview URI. The script tag below is the marker
+       the provider replaces. -->
+  <script id="kovix-script-loader">
+    // Placeholder — the provider replaces this script tag with the real
+    // agentPanel.js loader that uses acquireVsCodeApi() and registers
+    // the message handler.
+  </script>
+</body>
+</html>

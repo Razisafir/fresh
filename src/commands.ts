@@ -1,22 +1,29 @@
 /**
  * commands.ts — Layer 4 command handlers for the Kovix extension.
  *
- * Phase 3 Round 2C: registers the four v0.1 commands from package.json:
- *   - kovix.openAgentPanel   — opens the agent chat webview (stub for v0.1)
+ * Phase 3 Round 2D: registers the seven v0.1 commands from package.json:
+ *   - kovix.openAgentPanel   — focuses the agent chat webview (R-008 fix)
  *   - kovix.manageApiKeys    — opens the API key quick-input flow
  *   - kovix.setActiveMode    — quick-pick for autonomy mode
  *   - kovix.runTask          — prompts for a task, runs planning phase,
  *                              displays the plan for approval (Execute
- *                              gate fires when user approves)
+ *                              gate fires when user approves). Output
+ *                              streams to the agent panel webview if
+ *                              open, else to an output channel.
+ *   - kovix.viewPendingChanges — lists pending changes for review
+ *   - kovix.resumeMilestone  — resumes from the current paused milestone
+ *   - kovix.skipMilestone    — skips the current paused milestone
  *
  * 02_ARCHITECTURE.md §4.8 lists this file as Layer 4 (entry). All
  * commands are thin wrappers around the agent loop singleton obtained
- * via getAgentLoop(). The UI layer (future ui/agentPanel.ts webview)
- * will be the primary surface for these flows; the commands exist as
- * command-palette entry points and for headless testing.
+ * via getAgentLoop(). The agent panel webview (src/ui/agentPanel.ts) is
+ * the primary surface; these commands exist as command-palette entry
+ * points and for headless testing / power users.
  *
- * Decisions referenced: D-011 (extension route), P0-5 fix (no direct
- * disk writes — write_file/edit_file stage via pendingChangesService).
+ * Decisions referenced: D-011 (extension route), D-012 (2-webview scope),
+ * D-013 (Material aesthetic), P0-5 fix (no direct disk writes —
+ * write_file/edit_file stage via pendingChangesService), R-008 fix
+ * (openAgentPanel uses WebviewViewProvider.focus, not openView).
  */
 
 import * as vscode from 'vscode';
@@ -24,6 +31,7 @@ import { logger } from './util/logger';
 import { getAgentLoop } from './agent/agentLoop';
 import { getAIService } from './extension';
 import { pendingChangesService } from './diff/pendingChangesService';
+import { getAgentPanel } from './ui/agentPanel';
 import { ExecutionState } from './types/agent';
 
 /**
@@ -35,30 +43,20 @@ export function registerCommands(context: vscode.ExtensionContext): void {
         // ----------------------------------------------------------------------
         // kovix.openAgentPanel
         // ----------------------------------------------------------------------
-        // v0.1 stub: shows an info message. The real webview lands in the
-        // next round (UI Layer 3) per 02_ARCHITECTURE.md §4.7. The command
-        // exists now so the activation event in package.json resolves and
-        // the activity-bar icon does something.
+        // Round 2D: focuses the agent panel webview via the WebviewViewProvider.
+        // This fixes R-008 — the old repo's `openView` call didn't reliably
+        // expand the auxiliary bar on first launch. Using the provider's
+        // `focus()` method (which delegates to `view.show(true)` or falls
+        // back to `${viewId}.focus` if the view hasn't resolved yet) is the
+        // VS Code-recommended pattern for activity-bar-anchored views.
         context.subscriptions.push(
                 vscode.commands.registerCommand('kovix.openAgentPanel', async () => {
-                        const agentLoop = getAgentLoop();
-                        if (!agentLoop) {
-                                vscode.window.showErrorMessage('Kovix agent loop is not initialised. Reload the window.');
+                        const panel = getAgentPanel();
+                        if (!panel) {
+                                vscode.window.showErrorMessage('Kovix agent panel is not initialised. Reload the window.');
                                 return;
                         }
-                        // v0.1 placeholder: open a quick-pick that lets the user start a task.
-                        const action = await vscode.window.showQuickPick(
-                                ['Run a task…', 'View pending changes…', 'Clear conversation history'],
-                                { placeHolder: 'Kovix agent panel (webview coming in a later round)' },
-                        );
-                        if (action === 'Run a task…') {
-                                vscode.commands.executeCommand('kovix.runTask');
-                        } else if (action === 'View pending changes…') {
-                                vscode.commands.executeCommand('kovix.viewPendingChanges');
-                        } else if (action === 'Clear conversation history') {
-                                agentLoop.clearConversationHistory();
-                                vscode.window.showInformationMessage('Kovix: conversation history cleared.');
-                        }
+                        await panel.focus();
                 }),
         );
 
@@ -365,5 +363,5 @@ export function registerCommands(context: vscode.ExtensionContext): void {
                 }),
         );
 
-        logger.info('[Commands] Registered 6 commands (openAgentPanel, manageApiKeys, setActiveMode, runTask, viewPendingChanges, resumeMilestone, skipMilestone).');
+        logger.info('[Commands] Registered 7 commands (openAgentPanel, manageApiKeys, setActiveMode, runTask, viewPendingChanges, resumeMilestone, skipMilestone).');
 }

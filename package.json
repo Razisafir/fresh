@@ -78,7 +78,7 @@
           "type": "webview",
           "id": "kovix.agentPanel",
           "name": "Agent",
-          "when": "! Kovix.disabled"
+          "when": "!kovix.disabled"
         }
       ]
     },

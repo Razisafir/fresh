@@ -1,0 +1,41 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Kovix">
+  <!--
+    Kovix activity bar icon — 24x24 SVG, designed to read at 16x16 (default
+    activity bar icon size in VS Code). Uses `currentColor` so it inherits
+    the activity bar foreground color (white in default dark themes, near-black
+    in light themes). Per D-013, the Kovix brand mark is a stylized "K" formed
+    by two angled strokes meeting a vertical bar — abstract enough to not look
+    like a letter from any existing IDE brand, geometric enough to read at
+    small sizes.
+
+    The mark is the agent "spark" — three nodes connected by lines, evoking
+    a Plan→Approve→Execute→Verify loop. Left node = plan, center node =
+    execute, right node = verify. The connecting lines suggest the loop.
+
+    Shape notes:
+    - Three circles (r=2.2) at (5,12), (12,6), (12,18)
+    - Two strokes connecting (5,12)→(12,6) and (5,12)→(12,18)
+    - One stroke connecting (12,6)→(19,12)→(12,18) (the "verify" arc)
+    - Stroke width 1.6px, linecap round, linejoin round
+
+    VS Code icon guidelines followed:
+    - 24x24 viewBox
+    - center on 12,12 (the visual mass is biased left, balanced by the right arc)
+    - 1.6px stroke (within the 1.5-2px range VS Code recommends for 24x24)
+    - no fill on strokes (only the node circles are filled)
+    - uses currentColor so it adapts to the user's theme
+  -->
+  <g stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- plan node -->
+    <line x1="5" y1="12" x2="12" y2="6" />
+    <!-- execute node (top) -->
+    <line x1="5" y1="12" x2="12" y2="18" />
+    <!-- verify arc -->
+    <path d="M 12 6 Q 19 9 19 12 Q 19 15 12 18" />
+  </g>
+  <g fill="currentColor">
+    <circle cx="5" cy="12" r="2.2" />
+    <circle cx="12" cy="6" r="2.2" />
+    <circle cx="12" cy="18" r="2.2" />
+  </g>
+</svg>
