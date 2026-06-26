@@ -30,6 +30,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import type { ITool, ToolExecuteFn, IConstructToolRegistry } from '../../types/tools';
 import { assertWithinWorkspace } from '../../security/workspaceGuard';
+import { getWorkspaceRootsProvider } from '../../security/workspaceRoots';
 import { sanitise as sanitiseForLlm } from '../../security/promptSanitiser';
 import { logger } from '../../util/logger';
 
@@ -79,19 +80,11 @@ export const executeReadFile: ToolExecuteFn = async (input) => {
         }
 
         try {
-                // SEC-4: Path traversal prevention. Use workspace folders as the
-                // boundary. Multi-root workspaces: path is valid if inside ANY root
-                // (R1 fix preserved).
-                const roots = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) ?? [];
-                if (roots.length > 0) {
-                        assertWithinWorkspace(filePath, roots[0]);
-                        // Note: assertWithinWorkspace with a single string does the
-                        // single-root check. Multi-root check uses IWorkspaceRootsProvider.
-                        // For simplicity in the v0.1 file tools, we check the first root
-                        // here — the multi-root edge case is exercised by tests and the
-                        // agent loop can pass the right root explicitly. v1.0 may
-                        // upgrade this to pass a true IWorkspaceRootsProvider.
-                }
+                // SEC-4: Path traversal prevention. Pass ALL workspace roots via
+                // IWorkspaceRootsProvider so a multi-root workspace accepts paths
+                // inside ANY root (Phase 8-C fix — previously only roots[0] was
+                // checked, which rejected valid paths in the second+ root).
+                assertWithinWorkspace(filePath, getWorkspaceRootsProvider());
 
                 const uri = resolveUri(filePath);
                 const bytes = await vscode.workspace.fs.readFile(uri);

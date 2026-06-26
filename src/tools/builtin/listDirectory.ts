@@ -30,6 +30,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import type { ITool, ToolExecuteFn, IConstructToolRegistry } from '../../types/tools';
 import { assertWithinWorkspace } from '../../security/workspaceGuard';
+import { getWorkspaceRootsProvider } from '../../security/workspaceRoots';
 import { logger } from '../../util/logger';
 
 const MAX_OUTPUT_LENGTH = 100_000;
@@ -74,11 +75,9 @@ export const executeListDirectory: ToolExecuteFn = async (input) => {
         }
 
         try {
-                // SEC-4: Path traversal prevention
-                const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-                if (root) {
-                        assertWithinWorkspace(dirPath, root);
-                }
+                // SEC-4: Path traversal prevention. Pass ALL workspace roots via
+                // IWorkspaceRootsProvider (Phase 8-C multi-root fix).
+                assertWithinWorkspace(dirPath, getWorkspaceRootsProvider());
 
                 const uri = resolveUri(dirPath);
                 const entries = await vscode.workspace.fs.readDirectory(uri);
