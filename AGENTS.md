@@ -36,13 +36,13 @@ Kovix is an AI-native development environment (VS Code / Code-OSS fork with an a
 | `docs/03_MIGRATION_LOG.md` | Phase 3 running log. One entry per file/module reviewed. |
 | `docs/05_TEST_PLAN.md` | Phase 5 output (to be produced). Test suite + smoke checklist. |
 | `docs/07_MAINTENANCE.md` | Phase 7 output (to be produced). CONTRIBUTING, CHANGELOG, "definition of reviewed" checklist. |
-| `docs/DECISIONS.md` | Running decision log (to be created in Phase 2). |
+| `docs/DECISIONS.md` | Running decision log. Started in Phase 1. Every keep/rewrite/drop choice lands here. |
 
 ## SDLC phase status
 
 - [x] Phase 0 — Repos cloned, fresh initialized, old repo audited (`docs/00_OLD_REPO_STATE.md` + `docs/00_FILE_SUMMARIES.md`).
-- [ ] Phase 1 — Discovery & Requirements (in progress, see `docs/01_REQUIREMENTS.md` when produced).
-- [ ] Phase 2 — Architecture & Planning.
+- [x] Phase 1 — Discovery & Requirements complete (`docs/01_REQUIREMENTS.md` + `docs/DECISIONS.md` started). User interview conducted. 4 open questions (OQ-1 through OQ-4) await user answers before Phase 2 can fully begin — but M1-M6 architecture work can proceed in parallel.
+- [ ] Phase 2 — Architecture & Planning (next).
 - [ ] Phase 3 — Source Audit & Migration.
 - [ ] Phase 4 — Implementation.
 - [ ] Phase 5 — Testing & Verification.
