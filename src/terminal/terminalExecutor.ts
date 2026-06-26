@@ -47,7 +47,7 @@
  * tools dropped), D-011 (extension route), SEC-3, SEC-9, W2 (no Kali).
  */
 
-import * as child_process from 'child_process';
+import { spawn } from 'child_process';
 import { logger } from '../util/logger';
 import { buildChildEnv } from '../security/childEnv';
 import { isBlockedCommand, detectShellMetacharInArgs } from './commandBlocklist';
@@ -301,7 +301,7 @@ export class TerminalExecutor implements ITerminalExecutor {
                 }
 
                 return new Promise<ITerminalExecResult>((resolve, reject) => {
-                        const proc = child_process.spawn(program, args, {
+                        const proc = spawn(program, args, {
                                 cwd: options?.cwd,
                                 env,
                                 stdio: ['ignore', 'pipe', 'pipe'],
