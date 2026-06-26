@@ -1,0 +1,85 @@
+# Kovix CI — runs the same 5 quality gates enforced locally.
+#
+# Triggers:
+#   - push to any branch (so feature branches get CI before merge)
+#   - pull_request to main (the merge gate)
+#   - workflow_dispatch (manual re-run from the Actions tab)
+#
+# Matrix: Node 20 (LTS, minimum supported per package.json notes) and
+# Node 22 (current LTS, what we develop against). VS Code itself is
+# not required — the test suite uses a Module._resolveFilename hook
+# to inject a vscode shim, so the whole suite runs headless in plain
+# Node. See test/_setup/vscode-shim-register.cjs.
+#
+# Gates (each is a separate step so a failure pinpoints which gate broke):
+#   1. typecheck  — tsc --noEmit against the strict tsconfig.json
+#   2. lint       — eslint . (security rules: no-eval, no-new-func,
+#                   no child_process.exec/execSync)
+#   3. compile    — tsc --noEmit + esbuild bundle → dist/extension.js
+#   4. test       — mocha with the vscode shim, 279 unit/integration tests
+#   5. audit      — npm audit (0 vulnerabilities required)
+#
+# The compiled bundle is uploaded as an artifact so a reviewer can
+# download the exact .js that CI validated, without rebuilding locally.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Node ${{ matrix.node-version }} on ubuntu-latest
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20.x', '22.x']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      - name: Gate 1 — typecheck
+        run: npm run typecheck
+
+      - name: Gate 2 — lint
+        run: npm run lint
+
+      - name: Gate 3 — compile
+        run: npm run compile
+
+      - name: Gate 4 — test (279 unit + integration tests)
+        run: npm test
+
+      - name: Gate 5 — audit (0 vulnerabilities required)
+        run: npm audit
+
+      - name: Upload compiled bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-bundle-node${{ matrix.node-version }}
+          path: dist/extension.js
+          if-no-files-found: error
+          retention-days: 14
