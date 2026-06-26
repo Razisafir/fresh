@@ -181,9 +181,9 @@
     "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node18 --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
-    "test": "tsc -p tsconfig.test.json --noEmit && cross-env NODE_OPTIONS=--no-experimental-strip-types mocha --config .mocharc.json",
-    "test:unit": "tsc -p tsconfig.test.json --noEmit && cross-env NODE_OPTIONS=--no-experimental-strip-types mocha --config .mocharc.json 'test/unit/**/*.test.ts'",
-    "test:integration": "tsc -p tsconfig.test.json --noEmit && cross-env NODE_OPTIONS=--no-experimental-strip-types mocha --config .mocharc.json 'test/integration/**/*.test.ts'",
+    "test": "tsc -p tsconfig.test.json --noEmit && node scripts/run-tests.cjs",
+    "test:unit": "tsc -p tsconfig.test.json --noEmit && node scripts/run-tests.cjs 'test/unit/**/*.test.ts'",
+    "test:integration": "tsc -p tsconfig.test.json --noEmit && node scripts/run-tests.cjs 'test/integration/**/*.test.ts'",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
@@ -193,7 +193,6 @@
     "@types/node": "^18.19.0",
     "@types/vscode": "^1.95.0",
     "chai": "^5.3.3",
-    "cross-env": "^7.0.3",
     "esbuild": "^0.25.12",
     "eslint": "^9.18.0",
     "globals": "^15.14.0",
