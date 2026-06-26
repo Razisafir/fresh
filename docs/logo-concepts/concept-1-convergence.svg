@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Kovix logo concept 1: Convergence">
+  <!--
+    CONCEPT 1: "Convergence"
+    Two chevron shapes converging at a central point — one in accent indigo,
+    one in lighter indigo. Suggests Plan + Execution converging into a
+    verified outcome. The negative space between the chevrons forms an
+    abstract K.
+
+    Palette (from 04_DESIGN_SYSTEM.md):
+      - #7c83ff (accent)
+      - #9aa0ff (accent-hover)
+      - #0e0f12 (surface-0, for the background version)
+
+    Scales cleanly 16px → 128px because the geometry is pure straight lines
+    (no thin strokes that disappear at small sizes).
+  -->
+  <defs>
+    <linearGradient id="k1-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9aa0ff" />
+      <stop offset="100%" stop-color="#7c83ff" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background (omit for transparent / activity-bar version) -->
+  <rect width="128" height="128" rx="28" fill="#0e0f12" />
+
+  <!-- Left chevron (the "plan" path) -->
+  <path d="M 38 28 L 38 100 L 50 100 L 50 64 L 86 100 L 102 100 L 58 56 L 92 28 L 76 28 L 50 52 L 50 28 Z"
+        fill="url(#k1-grad)" />
+
+  <!-- Right chevron accent (the "execution" path, slightly offset for depth) -->
+  <path d="M 86 100 L 102 100 L 64 60 L 56 68 Z"
+        fill="#9aa0ff" opacity="0.55" />
+</svg>

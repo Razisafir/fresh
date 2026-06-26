@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Kovix logo concept 2: Milestone Stepper">
+  <!--
+    CONCEPT 2: "Milestone Stepper"
+    A K constructed from three stacked horizontal segments of increasing
+    width, evoking a staircase / stepper. Each segment is a different shade
+    of indigo, representing the milestone phases in Plan→Approve→Execute→Verify.
+
+    Palette:
+      - #7c83ff (accent)        — top segment (plan)
+      - #9aa0ff (accent-hover)  — middle segment (execute)
+      - #6168e0 (accent-pressed)— bottom segment (verify)
+
+    The vertical spine ties the segments together into a recognizable K.
+    At 16px the three segments still read as a K silhouette.
+  -->
+  <defs>
+    <linearGradient id="k2-spine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#9aa0ff" />
+      <stop offset="100%" stop-color="#6168e0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="128" height="128" rx="28" fill="#0e0f12" />
+
+  <!-- Vertical spine of the K -->
+  <rect x="34" y="28" width="14" height="72" rx="3" fill="url(#k2-spine)" />
+
+  <!-- Upper diagonal arm — three stacked segments (staircase up) -->
+  <path d="M 48 38 L 96 38 L 96 50 L 48 50 Z" fill="#7c83ff" />
+  <path d="M 48 50 L 88 50 L 88 62 L 48 62 Z" fill="#9aa0ff" />
+  <path d="M 48 62 L 80 62 L 80 74 L 48 74 Z" fill="#6168e0" />
+
+  <!-- Lower diagonal arm — three stacked segments (staircase down) -->
+  <path d="M 48 74 L 80 74 L 80 86 L 48 86 Z" fill="#6168e0" />
+  <path d="M 48 86 L 88 86 L 88 98 L 48 98 Z" fill="#9aa0ff" />
+  <path d="M 48 98 L 96 98 L 96 110 L 48 110 Z" fill="#7c83ff" opacity="0" />
+
+  <!-- (Lower arm uses same three shades mirrored for symmetry) -->
+</svg>

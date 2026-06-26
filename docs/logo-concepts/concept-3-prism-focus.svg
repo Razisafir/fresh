@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Kovix logo concept 3: Prism Focus">
+  <!--
+    CONCEPT 3: "Prism Focus"
+    A hexagonal prism (representing focus / precision / transformation)
+    with a K carved out of the center as negative space. The K is formed
+    by the dark background showing through, which means it works on any
+    theme — light or dark — by inverting.
+
+    Palette:
+      - #7c83ff (accent) for the prism body
+      - #9aa0ff (accent-hover) for the highlight facet
+      - Background is whatever the host surface is (the K is negative space)
+
+    This is the most "techy / futuristic" of the three. It leans hardest
+    on geometric precision, which matches the "verification" theme of the
+    product.
+  -->
+  <defs>
+    <linearGradient id="k3-prism" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9aa0ff" />
+      <stop offset="100%" stop-color="#7c83ff" />
+    </linearGradient>
+    <linearGradient id="k3-highlight" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Hexagonal prism shape, rounded corners for friendliness -->
+  <path d="M 64 14
+           L 108 38
+           L 108 90
+           L 64 114
+           L 20 90
+           L 20 38
+           Z"
+        fill="url(#k3-prism)" />
+
+  <!-- Top-left highlight facet for 3D depth -->
+  <path d="M 64 14 L 108 38 L 64 62 L 20 38 Z"
+        fill="url(#k3-highlight)" />
+
+  <!-- K carved as negative space (uses fill-rule="evenodd" to punch a hole) -->
+  <path d="M 64 14
+           L 108 38
+           L 108 90
+           L 64 114
+           L 20 90
+           L 20 38
+           Z
+           M 44 38 L 44 90 L 54 90 L 54 68 L 78 90 L 92 90 L 64 60 L 88 38 L 74 38 L 54 56 L 54 38 Z"
+        fill="url(#k3-prism)"
+        fill-rule="evenodd" />
+
+  <!-- Re-apply the highlight facet over the carved K so the top stays bright -->
+  <path d="M 64 14 L 108 38 L 64 62 L 20 38 Z"
+        fill="url(#k3-highlight)" />
+</svg>
