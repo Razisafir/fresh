@@ -108,6 +108,7 @@ import {
 import { ITool, IConstructToolRegistry } from '../types/tools';
 import { IPendingChangesService } from '../diff/pendingChanges';
 import { IWorkspaceRootsProvider } from '../security/workspaceGuard';
+import { getMemoryService } from '../memory/memoryService';
 import { buildSystemPrompt } from './promptBuilder';
 import { executeMilestonesWithPauses } from './milestoneExecutor';
 import { runVerification, detectVerificationCommand } from './verification';
@@ -264,11 +265,24 @@ export class AgentLoopService implements IAgentLoop, vscode.Disposable {
                 logger.info(`[AgentLoop] Planning phase started: ${task}`);
 
                 const workspacePath = this.deps.workspaceRoots.getWorkspaceRoots()[0] ?? '.';
-                const systemPrompt = buildSystemPrompt({
-                        task,
-                        planningOnly: true,
-                        workspacePath,
-                });
+
+                        // Phase 8-A (M5): retrieve relevant memories from prior tasks and
+                        // inject as extraContext. Degrades gracefully — if memory is
+                        // disabled (embedProvider=none) or Ollama is down, returns '' and
+                        // the agent proceeds without memory context.
+                        let memoryContext = '';
+                        try {
+                                memoryContext = await getMemoryService().retrieve(task, 5);
+                        } catch {
+                                // Never let memory failure break the agent loop.
+                        }
+
+                        const systemPrompt = buildSystemPrompt({
+                                task,
+                                planningOnly: true,
+                                workspacePath,
+                                extraContext: memoryContext || undefined,
+                        });
 
                 // F-003 multi-turn fix: prepend prior conversation context.
                 const conversationMessages: IChatMessage[] = [
@@ -561,6 +575,18 @@ export class AgentLoopService implements IAgentLoop, vscode.Disposable {
                                 { role: 'user', content: task },
                                 { role: 'assistant', content: finalSummary },
                         );
+
+                        // Phase 8-A (M5): store this task + outcome as a memory entry for
+                        // future recall. Fire-and-forget — never block the complete event
+                        // on memory storage. Degrades gracefully if memory is disabled.
+                        try {
+                                void getMemoryService().store(
+                                        `Task: ${task}\n\nOutcome: ${finalSummary}`,
+                                        { type: 'task_completion', milestoneCount: this._completedMilestoneIds.size },
+                                );
+                        } catch {
+                                // Memory storage failure is non-fatal.
+                        }
 
                         this._executionState = ExecutionState.Complete;
                         this._onDidComplete.fire({ summary: finalSummary });
