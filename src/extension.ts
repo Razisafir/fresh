@@ -36,6 +36,7 @@ import { initAgentLoop, getAgentLoop } from './agent/agentLoop';
 import { IWorkspaceRootsProvider } from './security/workspaceGuard';
 import { registerCommands } from './commands';
 import { registerAgentPanel } from './ui/agentPanel';
+import { McpManager } from './mcp/mcpManager';
 
 let _aiService: ConstructAIService | undefined;
 
@@ -121,11 +122,23 @@ export function activate(context: vscode.ExtensionContext): void {
         //    (agentPanel → extension → commands → agentPanel).
         registerAgentPanel(context, _aiService);
 
+        // 7. MCP server host (Phase 8-B, M6). Reads kovix.mcp.servers, connects
+        //    to each configured MCP server via stdio, discovers their tools, and
+        //    registers them with the toolRegistry alongside the 7 built-ins.
+        //    v1.0-beta scope: stdio transport only. Degrades gracefully if no
+        //    servers are configured (zero-cost when unused).
+        const mcpManager = new McpManager(registry);
+        void mcpManager.start().then(() => {
+                logger.verbose(`[MCP] Started: ${mcpManager.connectedServerCount} servers, ${mcpManager.registeredToolCount} tools registered`);
+        });
+        context.subscriptions.push({ dispose: () => void mcpManager.stop() });
+
         logger.info(
                 `Kovix extension activated. AI provider: ${_aiService.activeProviderType ?? 'none'}, ` +
                 `tools registered: ${registry.listTools().length}, ` +
                 `agent loop: ready, ` +
-                `agent panel: registered.`,
+                `agent panel: registered, ` +
+                `MCP: ${mcpManager.connectedServerCount} servers connected.`,
         );
 }
 
