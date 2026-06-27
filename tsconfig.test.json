@@ -5,11 +5,13 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "incremental": false,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo.test"
+    "tsBuildInfoFile": "./dist/.tsbuildinfo.test",
+    "typeRoots": ["./test/_setup", "./node_modules/@types"]
   },
   "include": [
     "src/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "test/_setup/vscode.d.ts"
   ],
   "exclude": [
     "node_modules",

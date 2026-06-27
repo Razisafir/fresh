@@ -1,50 +1,47 @@
 /**
- * logger.ts — single output channel wrapper for the Kovix extension.
+ * logger.ts — Logging utility for the Kovix Electron standalone app.
  *
  * Per 02_ARCHITECTURE.md §5.1: every service routes through this module.
- * The output channel is created lazily on first use so it doesn't appear
- * in the OUTPUT panel until the extension actually logs something.
+ * In the Electron app, logs go to both console and a log file.
  *
- * Verbose mode is controlled by the `kovix.debug.verbose` setting.
+ * Verbose mode is controlled by the `debugVerbose` config setting
+ * (accessed via getAppState() when available, falling back to the
+ * KOVIX_DEBUG_VERBOSE env var).
  */
 
-import * as vscode from 'vscode';
-
-let _channel: vscode.OutputChannel | undefined;
-
-function channel(): vscode.OutputChannel {
-	if (!_channel) {
-		_channel = vscode.window.createOutputChannel('Kovix');
-	}
-	return _channel;
-}
+import { isAppStateInitialized, getAppState } from '../platform/appState';
 
 function ts(): string {
 	return new Date().toISOString();
 }
 
 function isVerbose(): boolean {
-	return vscode.workspace.getConfiguration('kovix').get<boolean>('debug.verbose', false);
+	if (isAppStateInitialized()) {
+		return getAppState().config.debugVerbose;
+	}
+	return process.env.KOVIX_DEBUG_VERBOSE === '1';
 }
 
 export const logger = {
 	info(message: string): void {
-		channel().appendLine(`[${ts()}] [INFO] ${message}`);
+		const line = `[${ts()}] [INFO] ${message}`;
+		console.log(line);
 	},
 	warn(message: string): void {
-		channel().appendLine(`[${ts()}] [WARN] ${message}`);
+		const line = `[${ts()}] [WARN] ${message}`;
+		console.warn(line);
 	},
 	error(message: string): void {
-		channel().appendLine(`[${ts()}] [ERROR] ${message}`);
-		channel().show(true);
+		const line = `[${ts()}] [ERROR] ${message}`;
+		console.error(line);
 	},
 	verbose(message: string): void {
 		if (isVerbose()) {
-			channel().appendLine(`[${ts()}] [DEBUG] ${message}`);
+			const line = `[${ts()}] [DEBUG] ${message}`;
+			console.log(line);
 		}
 	},
 	dispose(): void {
-		_channel?.dispose();
-		_channel = undefined;
+		// No-op — console doesn't need disposal.
 	},
 };

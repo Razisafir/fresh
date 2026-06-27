@@ -81,11 +81,25 @@ class MockToolRegistry implements IConstructToolRegistry {
 
 describe('McpManager (no servers configured)', () => {
         it('start() is a no-op when kovix.mcp.servers is empty', async () => {
-                const registry = new MockToolRegistry();
-                const mgr = new McpManager(registry);
-                await mgr.start();
-                expect(mgr.connectedServerCount).to.equal(0);
-                expect(mgr.registeredToolCount).to.equal(0);
+                // McpManager.readConfig() now calls getAppState().config.mcpServers,
+                // which requires appState to be initialized. For this test, we
+                // initialize it with a temp dir so the manager can read config.
+                const { initAppState, _resetAppState } = require('../../../src/platform/appState');
+                const path = require('path');
+                const os = require('os');
+                const fs = require('fs');
+                const tmpDir = path.join(os.tmpdir(), 'kovix-test-mcp-' + process.pid);
+                fs.mkdirSync(tmpDir, { recursive: true });
+                try {
+                        await initAppState(tmpDir);
+                        const registry = new MockToolRegistry();
+                        const mgr = new McpManager(registry);
+                        await mgr.start();
+                        expect(mgr.connectedServerCount).to.equal(0);
+                        expect(mgr.registeredToolCount).to.equal(0);
+                } finally {
+                        _resetAppState();
+                }
         });
 
         it('stop() is a no-op when nothing was started', async () => {

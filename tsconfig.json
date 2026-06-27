@@ -8,7 +8,7 @@
       "DOM"
     ],
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -26,11 +26,13 @@
     "tsBuildInfoFile": "./dist/.tsbuildinfo"
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "electron/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "test"
+    "test",
+    "renderer"
   ]
 }

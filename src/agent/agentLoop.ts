@@ -86,7 +86,6 @@
  * multi-turn fix, F-007 selectedMilestoneIds fix, P0-5 fix.
  */
 
-import * as vscode from 'vscode';
 import { logger } from '../util/logger';
 import {
         IAgentLoop,
@@ -153,7 +152,20 @@ export interface IAgentLoopDeps {
  * exported getAgentLoop() accessor. Do not construct additional
  * instances.
  */
-export class AgentLoopService implements IAgentLoop, vscode.Disposable {
+export class AgentLoopService implements IAgentLoop {
+
+        // Minimal EventEmitter (replaces vscode.EventEmitter)
+        private static _createEmitter<T>() {
+                const listeners: Array<(data: T) => void> = [];
+                return {
+                        event: (listener: (data: T) => void) => {
+                                listeners.push(listener);
+                                return { dispose: () => { const i = listeners.indexOf(listener); if (i >= 0) listeners.splice(i, 1); } };
+                        },
+                        fire: (data: T) => { for (const l of [...listeners]) { try { l(data); } catch { /* swallow */ } } },
+                        dispose: () => { listeners.length = 0; },
+                };
+        }
 
         private _isRunning = false;
         private _executionState: ExecutionState = ExecutionState.Idle;
@@ -170,17 +182,17 @@ export class AgentLoopService implements IAgentLoop, vscode.Disposable {
          */
         private _conversationHistory: IChatMessage[] = [];
 
-        private readonly _onDidStart = new vscode.EventEmitter<string>();
+        private readonly _onDidStart = AgentLoopService._createEmitter<string>();
         readonly onDidStart = this._onDidStart.event;
-        private readonly _onDidComplete = new vscode.EventEmitter<{ summary: string }>();
+        private readonly _onDidComplete = AgentLoopService._createEmitter<{ summary: string }>();
         readonly onDidComplete = this._onDidComplete.event;
-        private readonly _onError = new vscode.EventEmitter<{ text: string; recoverable: boolean }>();
+        private readonly _onError = AgentLoopService._createEmitter<{ text: string; recoverable: boolean }>();
         readonly onError = this._onError.event;
-        private readonly _onLoadingStateChange = new vscode.EventEmitter<LoadingState>();
+        private readonly _onLoadingStateChange = AgentLoopService._createEmitter<LoadingState>();
         readonly onLoadingStateChange = this._onLoadingStateChange.event;
-        private readonly _onFileChange = new vscode.EventEmitter<FileChangeEntry>();
+        private readonly _onFileChange = AgentLoopService._createEmitter<FileChangeEntry>();
         readonly onFileChange = this._onFileChange.event;
-        private readonly _onDidMilestonePause = new vscode.EventEmitter<IMilestone>();
+        private readonly _onDidMilestonePause = AgentLoopService._createEmitter<IMilestone>();
         readonly onDidMilestonePause = this._onDidMilestonePause.event;
 
         constructor(private readonly deps: IAgentLoopDeps) {

@@ -1,14 +1,8 @@
 {
   "name": "kovix",
-  "displayName": "Kovix",
   "description": "AI-native development environment with Plan→Approve→Execute→Verify agent loop, multi-provider LLM, MCP servers, and semantic memory.",
   "version": "0.1.0-alpha",
-  "publisher": "kovix",
-  "engines": {
-    "vscode": "^1.95.0"
-  },
   "license": "MIT",
-  "icon": "media/kovix-icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Razisafir/fresh.git"
@@ -17,192 +11,27 @@
   "bugs": {
     "url": "https://github.com/Razisafir/fresh/issues"
   },
-  "categories": [
-    "AI",
-    "Machine Learning",
-    "Programming Languages",
-    "Other"
-  ],
-  "main": "./dist/extension.js",
-  "activationEvents": [
-    "onCommand:kovix.openAgentPanel",
-    "onCommand:kovix.manageApiKeys",
-    "onCommand:kovix.setActiveMode",
-    "onCommand:kovix.runTask",
-    "onCommand:kovix.viewPendingChanges",
-    "onCommand:kovix.resumeMilestone",
-    "onCommand:kovix.skipMilestone"
-  ],
-  "contributes": {
-    "commands": [
-      {
-        "command": "kovix.openAgentPanel",
-        "title": "Kovix: Open Agent Panel",
-        "category": "Kovix"
-      },
-      {
-        "command": "kovix.manageApiKeys",
-        "title": "Kovix: Manage API Keys",
-        "category": "Kovix"
-      },
-      {
-        "command": "kovix.setActiveMode",
-        "title": "Kovix: Set Active Mode",
-        "category": "Kovix"
-      },
-      {
-        "command": "kovix.runTask",
-        "title": "Kovix: Run Task",
-        "category": "Kovix"
-      },
-      {
-        "command": "kovix.viewPendingChanges",
-        "title": "Kovix: View Pending Changes",
-        "category": "Kovix"
-      },
-      {
-        "command": "kovix.resumeMilestone",
-        "title": "Kovix: Resume Milestone",
-        "category": "Kovix"
-      },
-      {
-        "command": "kovix.skipMilestone",
-        "title": "Kovix: Skip Milestone",
-        "category": "Kovix"
-      }
-    ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "kovix",
-          "title": "Kovix",
-          "icon": "media/kovix-viewbar.svg"
-        }
-      ]
-    },
-    "views": {
-      "kovix": [
-        {
-          "type": "webview",
-          "id": "kovix.agentPanel",
-          "name": "Agent",
-          "when": "!kovix.disabled"
-        }
-      ]
-    },
-    "configuration": {
-      "title": "Kovix",
-      "properties": {
-        "kovix.llm.activeProvider": {
-          "type": "string",
-          "enum": [
-            "anthropic",
-            "openai",
-            "nvidia-nim",
-            "openrouter",
-            "lm-studio",
-            "together",
-            "groq",
-            "mistral",
-            "gemini",
-            "deepseek",
-            "ollama",
-            "litellm",
-            "custom"
-          ],
-          "default": "anthropic",
-          "description": "Active LLM provider for the agent."
-        },
-        "kovix.llm.activeModel": {
-          "type": "string",
-          "default": "",
-          "description": "Model name for the active provider (e.g. 'claude-sonnet-4-20250514')."
-        },
-        "kovix.autonomy.defaultMode": {
-          "type": "string",
-          "enum": [
-            "every_milestone",
-            "major_milestone",
-            "selective",
-            "full_auto"
-          ],
-          "default": "major_milestone",
-          "description": "Default autonomy mode for plan execution."
-        },
-        "kovix.autonomy.pauseOnVerificationFailure": {
-          "type": "boolean",
-          "default": true,
-          "description": "Always pause when verification fails (regardless of autonomy mode)."
-        },
-        "kovix.memory.embedProvider": {
-          "type": "string",
-          "enum": [
-            "ollama",
-            "openai",
-            "none"
-          ],
-          "default": "ollama",
-          "description": "Embedding provider for semantic memory indexing."
-        },
-        "kovix.memory.embedModel": {
-          "type": "string",
-          "default": "nomic-embed-text",
-          "description": "Embedding model name."
-        },
-        "kovix.memory.vectorStore": {
-          "type": "string",
-          "enum": [
-            "in-process",
-            "qdrant"
-          ],
-          "default": "in-process",
-          "description": "Vector store backend (in-process = hnswlib-node, no Docker)."
-        },
-        "kovix.mcp.servers": {
-          "type": "array",
-          "default": [],
-          "description": "MCP server configurations (stdio or SSE).",
-          "items": {
-            "type": "object"
-          }
-        },
-        "kovix.mcp.toolTimeoutMs": {
-          "type": "number",
-          "default": 30000,
-          "description": "Per-tool-call timeout for MCP tools."
-        },
-        "kovix.security.allowExternalTargets": {
-          "type": "boolean",
-          "default": false,
-          "description": "Allow outbound fetches to non-allowlisted external URLs (advanced)."
-        },
-        "kovix.debug.verbose": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable verbose logging to the Kovix output channel."
-        }
-      }
-    }
-  },
+  "main": "dist/electron-main.js",
   "scripts": {
-    "compile": "tsc -p tsconfig.json --noEmit && esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node18",
-    "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node18 --watch",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "electron .",
+    "compile": "tsc --noEmit && node scripts/build-electron.cjs",
+    "watch": "node scripts/build-electron.cjs --watch",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "tsc -p tsconfig.test.json --noEmit && node scripts/run-tests.cjs",
     "test:unit": "tsc -p tsconfig.test.json --noEmit && node scripts/run-tests.cjs 'test/unit/**/*.test.ts'",
     "test:integration": "tsc -p tsconfig.test.json --noEmit && node scripts/run-tests.cjs 'test/integration/**/*.test.ts'",
-    "package": "vsce package --no-dependencies",
-    "package:force": "vsce package --no-dependencies --allow-missing-repository"
+    "smoke": "node scripts/smoke-test.cjs",
+    "dist": "electron-builder"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.0",
-    "@types/vscode": "^1.95.0",
-    "@vscode/vsce": "^3.9.2",
     "chai": "^5.3.3",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.0",
     "esbuild": "^0.25.12",
     "eslint": "^9.18.0",
     "globals": "^15.14.0",
@@ -217,5 +46,26 @@
   },
   "dependencies": {
     "hnswlib-node": "^3.0.0"
+  },
+  "build": {
+    "appId": "com.kovix.desktop",
+    "productName": "Kovix",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "renderer/**",
+      "media/**"
+    ],
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }

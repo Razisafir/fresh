@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; font-src 'self';">
+  <title>Kovix</title>
+  <link rel="stylesheet" href="chat/chat.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header id="panel-header">
+      <div class="header-left">
+        <span class="logo">◆</span>
+        <span class="title">Kovix</span>
+      </div>
+      <div class="header-right">
+        <button id="btn-folder" title="Open folder">📂</button>
+        <button id="btn-settings" title="Settings">⚙️</button>
+      </div>
+    </header>
+
+    <!-- Message list -->
+    <main id="message-list">
+      <div id="welcome-message" class="welcome">
+        <p>Welcome to Kovix. Open a folder to get started.</p>
+      </div>
+    </main>
+
+    <!-- Pending changes bar -->
+    <div id="pending-bar" class="pending-bar hidden">
+      <span id="pending-count">0 pending changes</span>
+      <button id="btn-accept-all" class="btn-small btn-accept">Accept all</button>
+      <button id="btn-reject-all" class="btn-small btn-reject">Reject all</button>
+    </div>
+
+    <!-- Input area -->
+    <footer id="input-area">
+      <textarea id="input-box" placeholder="Describe a task…" rows="1"></textarea>
+      <button id="btn-send" title="Send task">➤</button>
+    </footer>
+  </div>
+
+  <!-- API key modal (first-run) -->
+  <div id="api-key-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Set API Key</h2>
+      <p>Enter your Anthropic API key to get started.</p>
+      <input id="api-key-input" type="password" placeholder="sk-ant-…">
+      <div class="modal-actions">
+        <button id="btn-save-key" class="btn-primary">Save</button>
+        <button id="btn-cancel-key" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="chat/chat.js"></script>
+</body>
+</html>

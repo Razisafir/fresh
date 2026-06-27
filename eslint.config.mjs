@@ -1,42 +1,9 @@
 /**
  * eslint.config.mjs — Kovix ESLint flat config.
  *
- * Pragmatic, not maximalist. Goal: mechanical backstop for the security
- * + dead-code claims in docs/ISSUES.md "Quality Pass Results" section,
- * WITHOUT enforcing a style opinion that would generate 200 reformat-only
- * changes on an already-shipped codebase.
- *
- * What this config enforces:
- *   - `@eslint/js` recommended — catches real bugs (undeclared vars,
- *     unreachable code, comparing with ==, etc.)
- *   - `typescript-eslint` recommended — catches TS-specific footguns
- *     (unused vars, any-typed args, non-null assertions where avoidable)
- *   - `no-eval` + `no-new-func` — security invariant (no dynamic code
- *     execution). Backs up the claim in ISSUES.md "Dead Code / Unused
- *     Exports — PASS".
- *   - `no-restricted-imports` + `no-restricted-syntax` for
- *     `child_process.exec` and `child_process.execSync` — security
- *     invariant (SEC-3, SEC-7). The agent must use `spawn()` /
- *     `spawnSync()` because they don't invoke a shell. This rule will
- *     fire on ANY future reintroduction of exec/execSync.
- *   - `@typescript-eslint/no-unused-vars` — backs up the "no dead code"
- *     claim. Pattern `^_` is allowed for intentionally-unused args
- *     (e.g. `_event` parameters in callback signatures).
- *
- * What this config does NOT enforce:
- *   - Indentation, line length, semicolon preferences
- *   - Import ordering
- *   - Naming conventions
- *   - JSDoc presence (already covered manually per ISSUES.md)
- *   - Type-aware rules (would require projectService; deferred until
- *     we have a real reason — recommended rules are sufficient for
- *     this gate-check)
- *
- * Globals:
- *   - Node files get `globals.node`
- *   - Test files additionally get `globals.mocha`
- *   - Webview client JS (`src/ui/webview/*.js`) gets `globals.browser`
- *     plus `acquireVsCodeApi` (the VS Code webview API global)
+ * Phase 0 pivot (D-015): Updated for Electron standalone app.
+ *   - Renderer JS files get browser globals (no acquireVsCodeApi)
+ *   - Source files no longer import from 'vscode'
  */
 
 import js from '@eslint/js';
@@ -45,7 +12,7 @@ import globals from 'globals';
 
 export default tseslint.config(
   // ----------------------------------------------------------------
-  // Ignores — applied first, before any rule config
+  // Ignores
   // ----------------------------------------------------------------
   {
     ignores: [
@@ -54,6 +21,7 @@ export default tseslint.config(
       'coverage/**',
       '**/*.d.ts',
       '.vscode-test/**',
+      'release/**',
     ],
   },
 
@@ -71,11 +39,8 @@ export default tseslint.config(
       },
     },
     rules: {
-      // Security invariants — back up the ISSUES.md claims mechanically
       'no-eval': 'error',
       'no-new-func': 'error',
-      // Unused vars — JS files use the base rule; TS files override below.
-      // Allow `_`-prefixed names for intentionally-unused args/callbacks.
       'no-unused-vars': [
         'error',
         {
@@ -93,6 +58,11 @@ export default tseslint.config(
               importNames: ['exec', 'execSync'],
               message:
                 'Use spawn()/spawnSync() instead — exec/execSync invoke a shell and are a shell-injection vector (SEC-3, SEC-7).',
+            },
+            {
+              name: 'vscode',
+              message:
+                'VS Code API removed in Phase 0 pivot (D-015). Use platform equivalents from src/platform/.',
             },
           ],
         },
@@ -116,7 +86,7 @@ export default tseslint.config(
   },
 
   // ----------------------------------------------------------------
-  // TypeScript files — recommended TS rules + unused-vars tightening
+  // TypeScript files
   // ----------------------------------------------------------------
   {
     files: ['**/*.ts'],
@@ -130,13 +100,23 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-      // Disable the base rule in favour of the TS-aware version
       'no-unused-vars': 'off',
     },
   },
 
   // ----------------------------------------------------------------
-  // Test files — mocha + chai globals
+  // Electron files — allow require() for electron APIs
+  // (must come AFTER the TS config so it overrides)
+  // ----------------------------------------------------------------
+  {
+    files: ['electron/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+
+  // ----------------------------------------------------------------
+  // Test files
   // ----------------------------------------------------------------
   {
     files: ['test/**/*.ts'],
@@ -146,28 +126,26 @@ export default tseslint.config(
       },
     },
     rules: {
-      // Test setup often uses `any` for vscode stubs; not a security concern
-      // in test code.
       '@typescript-eslint/no-explicit-any': 'off',
-      // Chai assertions like `expect(x).to.be.true;` trigger false positives
-      // — they ARE the test, they just look like unused member expressions.
-      // Standard workaround (alternative is eslint-plugin-chai-friendly,
-      // which adds a dependency for a single-rule issue).
       '@typescript-eslint/no-unused-expressions': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+      // Tests may still use the vscode shim
+      'no-restricted-imports': 'off',
     },
   },
 
   // ----------------------------------------------------------------
-  // Webview client JS — runs inside the webview iframe (browser env),
-  // plus the VS Code `acquireVsCodeApi()` global.
+  // Renderer client JS — runs in the browser context
   // ----------------------------------------------------------------
   {
-    files: ['src/ui/webview/**/*.js'],
+    files: ['renderer/**/*.js'],
     languageOptions: {
       globals: {
         ...globals.browser,
-        acquireVsCodeApi: 'readonly',
       },
+    },
+    rules: {
+      'no-restricted-imports': 'off',
     },
   },
 );

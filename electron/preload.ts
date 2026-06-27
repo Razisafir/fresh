@@ -1,0 +1,62 @@
+/**
+ * preload.ts — Electron preload script.
+ *
+ * Runs in the renderer's preload context. Uses contextBridge.exposeInMainWorld
+ * to expose a safe, limited API to the renderer process. The renderer accesses
+ * this via `window.__kovix_api`.
+ *
+ * No Node.js or Electron APIs are directly exposed — only the explicitly
+ * defined IPC bridge methods below.
+ */
+
+const { contextBridge, ipcRenderer } = require('electron') as typeof import('electron');
+
+const api = {
+        // ---- Agent operations ----
+        sendTask: (text: string) => ipcRenderer.invoke('agent:sendTask', text),
+        cancel: () => ipcRenderer.invoke('agent:cancel'),
+        approvePlan: (plan: unknown) => ipcRenderer.invoke('agent:approvePlan', plan),
+        cancelPlan: () => ipcRenderer.invoke('agent:cancelPlan'),
+        resumeMilestone: () => ipcRenderer.invoke('agent:resumeMilestone'),
+        skipMilestone: () => ipcRenderer.invoke('agent:skipMilestone'),
+
+        // ---- Pending changes ----
+        acceptChange: (filePath: string) => ipcRenderer.invoke('pending:accept', filePath),
+        rejectChange: (filePath: string) => ipcRenderer.invoke('pending:reject', filePath),
+        acceptAllChanges: () => ipcRenderer.invoke('pending:acceptAll'),
+        rejectAllChanges: () => ipcRenderer.invoke('pending:rejectAll'),
+        getPendingSnapshot: () => ipcRenderer.invoke('pending:getSnapshot'),
+
+        // ---- App operations ----
+        pickFolder: () => ipcRenderer.invoke('app:pickFolder'),
+        getConfig: () => ipcRenderer.invoke('app:getConfig'),
+        updateConfig: (updates: Record<string, unknown>) => ipcRenderer.invoke('app:updateConfig', updates),
+        getAppState: () => ipcRenderer.invoke('app:ready'),
+
+        // ---- Secrets ----
+        getSecret: (key: string) => ipcRenderer.invoke('secrets:get', key),
+        setSecret: (key: string, value: string) => ipcRenderer.invoke('secrets:set', key, value),
+
+        // ---- Command confirmation ----
+        respondToConfirmation: (command: string, approved: boolean) =>
+                ipcRenderer.invoke('prompt:confirmResponse', command, approved),
+
+        // ---- Event listeners (main → renderer) ----
+        onAgentEvent: (callback: (event: unknown) => void) => {
+                const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+                ipcRenderer.on('agent:event', handler);
+                return () => { ipcRenderer.removeListener('agent:event', handler); };
+        },
+        onPendingChanged: (callback: (entries: unknown) => void) => {
+                const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+                ipcRenderer.on('pending:changed', handler);
+                return () => { ipcRenderer.removeListener('pending:changed', handler); };
+        },
+        onPromptConfirmCommand: (callback: (command: string) => void) => {
+                const handler = (_event: Electron.IpcRendererEvent, command: string) => callback(command);
+                ipcRenderer.on('prompt:confirmCommand', handler);
+                return () => { ipcRenderer.removeListener('prompt:confirmCommand', handler); };
+        },
+};
+
+contextBridge.exposeInMainWorld('__kovix_api', api);

@@ -2,266 +2,237 @@
  * pendingChangesService.ts — Layer 2 concrete implementation of
  * IPendingChangesService.
  *
- * Ported from: `Kovix_2.0/src/vs/workbench/contrib/construct/browser/services/diff/pendingChangesService.ts` (199L)
- * Port strategy: PORT WITH TRANSLATION. The in-memory state machine and
- * disk-write semantics are preserved verbatim. The VS Code internal
- * service imports are translated to their public extension API
- * equivalents.
+ * Phase 0 pivot (D-015): replaced vscode imports with platform equivalents.
+ *   - vscode.Disposable → custom Disposable interface
+ *   - vscode.EventEmitter → local EventEmitter
+ *   - vscode.Uri → SimpleUri from platform/uris.ts
+ *   - vscode.workspace.fs → platform/fs.ts
  *
- * 02_ARCHITECTURE.md §6 mapping table: Layer 2 — port with translation.
- *
- * What this service does (preserved from old repo):
- *   - Stages agent-proposed file changes in memory (Map<uri.toString, entry>)
- *   - Captures the original file content at staging time (so the user can
- *     preview a diff before accepting)
- *   - NEVER writes to disk during staging — only on explicit accept()
- *   - accept() persists via vscode.workspace.fs.writeFile
- *   - reject() just drops the in-memory entry (and cleans up stray files
- *     for the rare new-file-then-reject case)
- *
- * Translation notes:
- *   - `Disposable` (VS Code internal base/common/lifecycle.js) → custom
- *     minimal Disposable interface. We don't need VS Code's full dispose
- *     hierarchy for a single service.
- *   - `Emitter<T>` (VS Code internal base/common/event.js) →
- *     `vscode.EventEmitter<T>` (public extension API, same shape).
- *   - `IFileService.readFile/writeFile/exists/createFolder/del` →
- *     `vscode.workspace.fs.readFile/writeFile/stat/createDirectory/delete`.
- *   - `URI` → `vscode.Uri`.
- *   - `VSBuffer.fromString(s)` → `Buffer.from(s, 'utf8')` then
- *     `Uint8Array.from(buffer)`. vscode.workspace.fs expects Uint8Array.
- *   - `ILogService` → our local `logger` from `src/util/logger.ts`.
- *   - Constructor injection (@ILogService, @IFileService) removed —
- *     singletons, no DI container (per 02_ARCHITECTURE.md §3 design
- *     choice #2). The service is constructed once in the future
- *     services.ts registry and exported as a singleton.
- *   - The old repo's `accept()` had a small race where two concurrent
- *     accept() calls for the same URI could both write. Not a real bug
- *     in practice (the agent loop is single-threaded per session), but
- *     we add an explicit `if (entry.accepted !== undefined) return`
- *     guard for defence-in-depth.
- *
- * The P0-5 fix from the old repo (no direct disk writes from the agent
- * loop) is preserved. This is foundational to the Plan→Approve→Execute→
- * Verify workflow — the user MUST be able to see and approve changes
- * before they hit disk.
- *
- * Decisions referenced: D-001 (file-by-file audit), D-011 (extension
- * route). P0-5 fix preserved.
+ * P0-5 fix preserved: NEVER writes to disk during staging.
  */
 
-import * as vscode from 'vscode';
+import * as path from 'path';
+import * as platformFs from '../platform/fs';
+import type { SimpleUri } from '../platform/uris';
 import { logger } from '../util/logger';
 import {
-	IPendingChangesService,
-	PendingChangeEntry,
+        IPendingChangesService,
+        PendingChangeEntry,
 } from './pendingChanges';
 
-/**
- * Concrete implementation of IPendingChangesService.
- *
- * Singleton — constructed once by the service registry (future services.ts).
- * Use the exported `pendingChangesService` instance, do not construct
- * additional instances.
- */
-export class PendingChangesService implements IPendingChangesService, vscode.Disposable {
+// ---------------------------------------------------------------------------
+// Minimal Disposable + EventEmitter (replaces vscode.*)
+// ---------------------------------------------------------------------------
 
-	private readonly _entries = new Map<string, PendingChangeEntry>();
-	private readonly _onDidChangePendingChanges = new vscode.EventEmitter<void>();
-	readonly onDidChangePendingChanges = this._onDidChangePendingChanges.event;
+interface Disposable {
+        dispose(): void;
+}
 
-	constructor() {
-		logger.info('[PendingChanges] Service created');
-	}
+class EventEmitter<T> {
+        private listeners: Array<(data: T) => void> = [];
 
-	get pendingEntries(): ReadonlyArray<PendingChangeEntry> {
-		return Array.from(this._entries.values()).filter(e => e.accepted === undefined);
-	}
+        get event(): (listener: (data: T) => void) => { dispose(): void } {
+                return (listener: (data: T) => void) => {
+                        this.listeners.push(listener);
+                        return {
+                                dispose: () => {
+                                        const idx = this.listeners.indexOf(listener);
+                                        if (idx >= 0) { this.listeners.splice(idx, 1); }
+                                },
+                        };
+                };
+        }
 
-	hasPendingChanges(): boolean {
-		return this.pendingEntries.length > 0;
-	}
+        fire(data: T): void {
+                for (const listener of [...this.listeners]) {
+                        try { listener(data); } catch {
+                                // Swallow errors in listeners.
+                        }
+                }
+        }
 
-	async stageFile(uri: vscode.Uri, proposedContent: string): Promise<void> {
-		const key = uri.toString();
+        dispose(): void {
+                this.listeners = [];
+        }
+}
 
-		// 1. Read current file content BEFORE any modification.
-		let originalContent = '';
-		let isNewFile = false;
-		try {
-			const bytes = await vscode.workspace.fs.readFile(uri);
-			originalContent = Buffer.from(bytes).toString('utf8');
-		} catch {
-			// File doesn't exist yet — this is a new file creation.
-			isNewFile = true;
-		}
+// ---------------------------------------------------------------------------
+// PendingChangesService
+// ---------------------------------------------------------------------------
 
-		// 2. If there's already a pending entry for this URI, update it
-		//    while preserving the REAL original (not the intermediate proposal).
-		const existing = this._entries.get(key);
-		if (existing) {
-			this._entries.set(key, {
-				uri,
-				originalContent: existing.originalContent,
-				proposedContent,
-				isNewFile: existing.isNewFile,
-				accepted: undefined,
-			});
-		} else {
-			this._entries.set(key, {
-				uri,
-				originalContent,
-				proposedContent,
-				isNewFile,
-				accepted: undefined,
-			});
-		}
+export class PendingChangesService implements IPendingChangesService, Disposable {
 
-		logger.info(`[PendingChanges] Staged file: ${uri.fsPath} (new: ${isNewFile}, ${proposedContent.length} chars)`);
-		this._onDidChangePendingChanges.fire();
-	}
+        private readonly _entries = new Map<string, PendingChangeEntry>();
+        private readonly _onDidChangePendingChanges = new EventEmitter<void>();
+        readonly onDidChangePendingChanges = this._onDidChangePendingChanges.event;
 
-	async stageEdit(uri: vscode.Uri, diff: string): Promise<void> {
-		// For edit_file, we stage the diff itself — the diff is applied
-		// at accept time by the (future) DiffApplierService. We still
-		// capture the original content here so the UI can preview.
-		const key = uri.toString();
+        constructor() {
+                logger.info('[PendingChanges] Service created');
+        }
 
-		let originalContent = '';
-		let isNewFile = false;
-		try {
-			const existing = this._entries.get(key);
-			if (existing) {
-				originalContent = existing.originalContent;
-				isNewFile = existing.isNewFile;
-			} else {
-				const bytes = await vscode.workspace.fs.readFile(uri);
-				originalContent = Buffer.from(bytes).toString('utf8');
-			}
-		} catch {
-			isNewFile = true;
-		}
+        get pendingEntries(): ReadonlyArray<PendingChangeEntry> {
+                return Array.from(this._entries.values()).filter(e => e.accepted === undefined);
+        }
 
-		this._entries.set(key, {
-			uri,
-			originalContent,
-			proposedContent: diff, // The diff content (applied at accept time)
-			isNewFile,
-			accepted: undefined,
-		});
+        hasPendingChanges(): boolean {
+                return this.pendingEntries.length > 0;
+        }
 
-		logger.info(`[PendingChanges] Staged edit: ${uri.fsPath} (${diff.length} chars diff)`);
-		this._onDidChangePendingChanges.fire();
-	}
+        async stageFile(uri: SimpleUri, proposedContent: string): Promise<void> {
+                const key = uri.toString();
 
-	async accept(uri: vscode.Uri): Promise<void> {
-		const key = uri.toString();
-		const entry = this._entries.get(key);
-		if (!entry) {
-			logger.warn(`[PendingChanges] No pending change for: ${uri.fsPath}`);
-			return;
-		}
+                // 1. Read current file content BEFORE any modification.
+                let originalContent = '';
+                let isNewFile = false;
+                try {
+                        originalContent = await platformFs.readFileText(uri.fsPath);
+                } catch {
+                        // File doesn't exist yet — this is a new file creation.
+                        isNewFile = true;
+                }
 
-		// Defence-in-depth: skip if already accepted/rejected.
-		if (entry.accepted !== undefined) {
-			logger.warn(`[PendingChanges] Entry already resolved (accepted=${entry.accepted}): ${uri.fsPath}`);
-			return;
-		}
+                // 2. If there's already a pending entry for this URI, update it
+                //    while preserving the REAL original (not the intermediate proposal).
+                const existing = this._entries.get(key);
+                if (existing) {
+                        this._entries.set(key, {
+                                uri,
+                                originalContent: existing.originalContent,
+                                proposedContent,
+                                isNewFile: existing.isNewFile,
+                                accepted: undefined,
+                        });
+                } else {
+                        this._entries.set(key, {
+                                uri,
+                                originalContent,
+                                proposedContent,
+                                isNewFile,
+                                accepted: undefined,
+                        });
+                }
 
-		// For stageEdit entries, the proposedContent is a diff string — we
-		// need the (future) DiffApplierService to convert it to final
-		// content before writing. For v0.1, only stageFile is exercised
-		// by the agent loop (edit_file in v0.1 also uses stageFile with
-		// the full new content, deferring true diff application to v1.0).
-		// The entry.proposedContent is therefore treated as final content.
+                logger.info(`[PendingChanges] Staged file: ${uri.fsPath} (new: ${isNewFile}, ${proposedContent.length} chars)`);
+                this._onDidChangePendingChanges.fire();
+        }
 
-		try {
-			// Ensure parent directory exists.
-			const parent = vscode.Uri.joinPath(uri, '..');
-			try {
-				await vscode.workspace.fs.stat(parent);
-			} catch {
-				await vscode.workspace.fs.createDirectory(parent);
-			}
+        async stageEdit(uri: SimpleUri, diff: string): Promise<void> {
+                const key = uri.toString();
 
-			const bytes = Buffer.from(entry.proposedContent, 'utf8');
-			await vscode.workspace.fs.writeFile(uri, new Uint8Array(bytes));
+                let originalContent = '';
+                let isNewFile = false;
+                try {
+                        const existing = this._entries.get(key);
+                        if (existing) {
+                                originalContent = existing.originalContent;
+                                isNewFile = existing.isNewFile;
+                        } else {
+                                originalContent = await platformFs.readFileText(uri.fsPath);
+                        }
+                } catch {
+                        isNewFile = true;
+                }
 
-			// Mark accepted (entry stays in the map for originalContent lookup).
-			this._entries.set(key, { ...entry, accepted: true });
-			logger.info(`[PendingChanges] Accepted and written to disk: ${uri.fsPath}`);
-		} catch (error) {
-			const msg = error instanceof Error ? error.message : String(error);
-			logger.error(`[PendingChanges] Failed to write accepted change: ${msg}`);
-			throw error;
-		}
+                this._entries.set(key, {
+                        uri,
+                        originalContent,
+                        proposedContent: diff,
+                        isNewFile,
+                        accepted: undefined,
+                });
 
-		this._onDidChangePendingChanges.fire();
-	}
+                logger.info(`[PendingChanges] Staged edit: ${uri.fsPath} (${diff.length} chars diff)`);
+                this._onDidChangePendingChanges.fire();
+        }
 
-	async reject(uri: vscode.Uri): Promise<void> {
-		const key = uri.toString();
-		const entry = this._entries.get(key);
-		if (!entry) {
-			logger.warn(`[PendingChanges] No pending change for: ${uri.fsPath}`);
-			return;
-		}
+        async accept(uri: SimpleUri): Promise<void> {
+                const key = uri.toString();
+                const entry = this._entries.get(key);
+                if (!entry) {
+                        logger.warn(`[PendingChanges] No pending change for: ${uri.fsPath}`);
+                        return;
+                }
 
-		// DO NOT write to disk. Just discard the in-memory entry.
-		// If the file was newly created (no original), and the file
-		// somehow exists on disk (shouldn't happen with our flow), clean
-		// it up defensively.
-		if (entry.isNewFile) {
-			try {
-				await vscode.workspace.fs.stat(uri);
-				await vscode.workspace.fs.delete(uri, { recursive: false, useTrash: true });
-				logger.info(`[PendingChanges] Rejected new file, deleted from disk: ${uri.fsPath}`);
-			} catch {
-				// File doesn't exist on disk — nothing to clean up. Fine.
-			}
-		}
+                if (entry.accepted !== undefined) {
+                        logger.warn(`[PendingChanges] Entry already resolved (accepted=${entry.accepted}): ${uri.fsPath}`);
+                        return;
+                }
 
-		// Mark rejected then drop from the map.
-		this._entries.delete(key);
-		logger.info(`[PendingChanges] Rejected: ${uri.fsPath}`);
-		this._onDidChangePendingChanges.fire();
-	}
+                try {
+                        // Ensure parent directory exists.
+                        const parent = path.dirname(uri.fsPath);
+                        await platformFs.createDirectory(parent);
 
-	async acceptAll(): Promise<void> {
-		const pending = this.pendingEntries;
-		logger.info(`[PendingChanges] Accepting all ${pending.length} changes`);
-		for (const entry of pending) {
-			await this.accept(entry.uri);
-		}
-	}
+                        await platformFs.writeFile(uri.fsPath, entry.proposedContent);
 
-	async rejectAll(): Promise<void> {
-		const pending = [...this.pendingEntries];
-		logger.info(`[PendingChanges] Rejecting all ${pending.length} changes`);
-		for (const entry of pending) {
-			await this.reject(entry.uri);
-		}
-	}
+                        // Mark accepted.
+                        this._entries.set(key, { ...entry, accepted: true });
+                        logger.info(`[PendingChanges] Accepted and written to disk: ${uri.fsPath}`);
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        logger.error(`[PendingChanges] Failed to write accepted change: ${msg}`);
+                        throw error;
+                }
 
-	getOriginalContent(uri: vscode.Uri): string | undefined {
-		return this._entries.get(uri.toString())?.originalContent;
-	}
+                this._onDidChangePendingChanges.fire();
+        }
 
-	getProposedContent(uri: vscode.Uri): string | undefined {
-		return this._entries.get(uri.toString())?.proposedContent;
-	}
+        async reject(uri: SimpleUri): Promise<void> {
+                const key = uri.toString();
+                const entry = this._entries.get(key);
+                if (!entry) {
+                        logger.warn(`[PendingChanges] No pending change for: ${uri.fsPath}`);
+                        return;
+                }
 
-	dispose(): void {
-		this._entries.clear();
-		this._onDidChangePendingChanges.dispose();
-	}
+                if (entry.isNewFile) {
+                        try {
+                                const exists = await platformFs.exists(uri.fsPath);
+                                if (exists) {
+                                        await platformFs.deletePath(uri.fsPath);
+                                        logger.info(`[PendingChanges] Rejected new file, deleted from disk: ${uri.fsPath}`);
+                                }
+                        } catch {
+                                // File doesn't exist on disk — nothing to clean up.
+                        }
+                }
+
+                this._entries.delete(key);
+                logger.info(`[PendingChanges] Rejected: ${uri.fsPath}`);
+                this._onDidChangePendingChanges.fire();
+        }
+
+        async acceptAll(): Promise<void> {
+                const pending = this.pendingEntries;
+                logger.info(`[PendingChanges] Accepting all ${pending.length} changes`);
+                for (const entry of pending) {
+                        await this.accept(entry.uri);
+                }
+        }
+
+        async rejectAll(): Promise<void> {
+                const pending = [...this.pendingEntries];
+                logger.info(`[PendingChanges] Rejecting all ${pending.length} changes`);
+                for (const entry of pending) {
+                        await this.reject(entry.uri);
+                }
+        }
+
+        getOriginalContent(uri: SimpleUri): string | undefined {
+                return this._entries.get(uri.toString())?.originalContent;
+        }
+
+        getProposedContent(uri: SimpleUri): string | undefined {
+                return this._entries.get(uri.toString())?.proposedContent;
+        }
+
+        dispose(): void {
+                this._entries.clear();
+                this._onDidChangePendingChanges.dispose();
+        }
 }
 
 /**
- * Singleton instance. Constructed at module load time.
- *
- * Future services.ts will own this and re-export it; for now, code that
- * needs the pending-changes service imports from here directly. The
- * single-construction guarantee is what makes this safe.
+ * Singleton instance.
  */
 export const pendingChangesService = new PendingChangesService();
