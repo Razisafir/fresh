@@ -6,6 +6,15 @@
 
 ---
 
+## D-015 — All scanned repos are original work, relicensable as MIT
+**Date:** 2026-06-29
+**Decision:** All repos scanned during the account audit (Kovix_2.0, Real-vibecode, Aegis, construct-ai-agent) are the project lead's original work. Most were private repos. They can be relicensed to MIT (or any license) without attribution concerns. No third-party code licensing conflicts exist for harvesting patterns from these repos into `fresh`.
+**Context:** Hard Stop #2 required the project lead to confirm whether Aegis (and by extension, all other scanned repos) was completely original or reference-only. The user confirmed: "all the repos scanned were mine plus most of them were private and not public hence i can make it mit or whatever u want."
+**Alternatives considered:** N/A — this was a factual gate.
+**Tradeoffs:** None — this is the best-case outcome. All harvest work is on solid legal footing.
+**Action items:** None — gate is cleared.
+**Revisit at:** N/A.
+
 ## D-014 — Electron Stage 1 Smoke Test PASSED
 **Date:** 2026-06-29
 **Decision:** Hard Stop #1 (Electron Stage 1 smoke test) is **PASSED**. The standalone Electron app was run by the project lead on Windows 10 (build 26200.8737), branch `harvest/full-run`. The user: (1) launched the app via `npm start`, (2) selected a workspace folder (`C:\Users\Lenovo\Desktop\Kovix trial folder`), (3) entered the task "Create a file called test-smoke.txt with the content 'smoke test passed'" in Chat mode, (4) saw a plan proposed, (5) approved it, (6) confirmed the file was written to disk. The full terminal log confirms: `[PendingChanges] Accepted and written to disk: C:\Users\Lenovo\Desktop\Kovix trial folder\test-smoke.txt`.
