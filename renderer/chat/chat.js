@@ -28,6 +28,8 @@ const settingsAnthropicKey = document.getElementById('settings-anthropic-key');
 const btnSaveAnthropicKey = document.getElementById('btn-save-anthropic-key');
 const settingsNvidiaKey = document.getElementById('settings-nvidia-key');
 const btnSaveNvidiaKey = document.getElementById('btn-save-nvidia-key');
+const settingsOpenRouterKey = document.getElementById('settings-openrouter-key');
+const btnSaveOpenRouterKey = document.getElementById('btn-save-openrouter-key');
 const btnCloseSettings = document.getElementById('btn-close-settings');
 const providerSelect = document.getElementById('provider-select');
 const apiKeyProvider = document.getElementById('api-key-provider');
@@ -49,7 +51,7 @@ let state = 'idle'; // idle | planning | awaiting_approval | executing | complet
 let currentMode = 'chat'; // 'chat' | 'plan'
 let _currentPlan = null;
 let streamingMessage = null;
-let activeProvider = 'anthropic'; // 'anthropic' | 'nvidia-nim'
+let activeProvider = 'anthropic'; // 'anthropic' | 'nvidia-nim' | 'openrouter'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -206,6 +208,22 @@ function addCommandConfirm(command) {
 function escapeHtml(text) {
   if (!text) return '';
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function getSecretKeyForProvider(providerType) {
+  switch (providerType) {
+    case 'nvidia-nim': return 'kovix.apiKey.nvidia-nim';
+    case 'openrouter': return 'kovix.apiKey.openrouter';
+    default: return 'kovix.apiKey.anthropic';
+  }
+}
+
+function getProviderDisplayName(providerType) {
+  switch (providerType) {
+    case 'nvidia-nim': return 'NVIDIA NIM';
+    case 'openrouter': return 'OpenRouter';
+    default: return 'Anthropic';
+  }
 }
 
 function setState(newState) {
@@ -439,7 +457,7 @@ btnSaveKey.addEventListener('click', async () => {
   const key = apiKeyInput.value.trim();
   const selectedProvider = apiKeyProvider ? apiKeyProvider.value : 'anthropic';
   if (key) {
-    const secretKey = selectedProvider === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : 'kovix.apiKey.anthropic';
+    const secretKey = getSecretKeyForProvider(selectedProvider);
     await api.setSecret(secretKey, key);
     // Switch to this provider
     const ok = await api.switchProvider(selectedProvider);
@@ -448,7 +466,7 @@ btnSaveKey.addEventListener('click', async () => {
       if (providerSelect) providerSelect.value = selectedProvider;
     }
     apiKeyModal.classList.add('hidden');
-    addMessage('system', `🔑 API key saved for ${selectedProvider === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}.`);
+    addMessage('system', `🔑 API key saved for ${getProviderDisplayName(selectedProvider)}.`);
     await loadModels();
   }
 });
@@ -498,11 +516,11 @@ modelSelect.addEventListener('change', async () => {
 if (providerSelect) {
   providerSelect.addEventListener('change', async () => {
     const providerType = providerSelect.value;
-    const secretKey = providerType === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : 'kovix.apiKey.anthropic';
+    const secretKey = getSecretKeyForProvider(providerType);
     const hasKey = await api.getSecret(secretKey);
     if (!hasKey) {
       // No key for this provider — open settings
-      addMessage('system', `No API key set for ${providerType === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}. Set it in Settings.`);
+      addMessage('system', `No API key set for ${getProviderDisplayName(providerType)}. Set it in Settings.`);
       settingsModal.classList.remove('hidden');
       providerSelect.value = activeProvider;
       return;
@@ -510,10 +528,10 @@ if (providerSelect) {
     const ok = await api.switchProvider(providerType);
     if (ok) {
       activeProvider = providerType;
-      addMessage('system', `Switched to ${providerType === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}.`);
+      addMessage('system', `Switched to ${getProviderDisplayName(providerType)}.`);
       await loadModels();
     } else {
-      addMessage('system', `Failed to switch to ${providerType}. Check your API key.`);
+      addMessage('system', `Failed to switch to ${getProviderDisplayName(providerType)}. Check your API key.`);
       providerSelect.value = activeProvider;
     }
   });
@@ -526,8 +544,10 @@ if (providerSelect) {
 btnSettings.addEventListener('click', async () => {
   const anthropicKey = await api.getSecret('kovix.apiKey.anthropic');
   const nvidiaKey = await api.getSecret('kovix.apiKey.nvidia-nim');
+  const openrouterKey = await api.getSecret('kovix.apiKey.openrouter');
   settingsAnthropicKey.value = anthropicKey || '';
   if (settingsNvidiaKey) settingsNvidiaKey.value = nvidiaKey || '';
+  if (settingsOpenRouterKey) settingsOpenRouterKey.value = openrouterKey || '';
   settingsModal.classList.remove('hidden');
 });
 
@@ -564,6 +584,25 @@ if (btnSaveNvidiaKey) {
   });
 }
 
+if (btnSaveOpenRouterKey) {
+  btnSaveOpenRouterKey.addEventListener('click', async () => {
+    const key = settingsOpenRouterKey.value.trim();
+    if (key) {
+      await api.setSecret('kovix.apiKey.openrouter', key);
+      addMessage('system', 'OpenRouter API key saved. Switching provider…');
+      settingsModal.classList.add('hidden');
+      // Auto-switch to OpenRouter
+      const ok = await api.switchProvider('openrouter');
+      if (ok) {
+        activeProvider = 'openrouter';
+        if (providerSelect) providerSelect.value = 'openrouter';
+        addMessage('system', 'Switched to OpenRouter.');
+      }
+      await loadModels();
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Init: check for API key on startup
 // ---------------------------------------------------------------------------
@@ -572,8 +611,9 @@ if (btnSaveNvidiaKey) {
   // Check for any API key
   const anthropicKey = await api.getSecret('kovix.apiKey.anthropic');
   const nvidiaKey = await api.getSecret('kovix.apiKey.nvidia-nim');
+  const openrouterKey = await api.getSecret('kovix.apiKey.openrouter');
 
-  if (!anthropicKey && !nvidiaKey) {
+  if (!anthropicKey && !nvidiaKey && !openrouterKey) {
     apiKeyModal.classList.remove('hidden');
   }
 
