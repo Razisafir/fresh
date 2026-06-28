@@ -331,6 +331,35 @@ function registerIpcHandlers(): void {
                 }
         });
 
+        ipcMain.handle('agent:switchProvider', async (_event: Electron.IpcMainInvokeEvent, providerType: string) => {
+                if (!aiService) return false;
+                try {
+                        const ok = await aiService.switchProvider(providerType as import('../src/types/llm').AIProviderType);
+                        if (ok) {
+                                // Persist the provider choice
+                                getAppState().config.llmActiveProvider = providerType;
+                                // Also persist — need to save config
+                                await getAppState().config.save();
+                        }
+                        return ok;
+                } catch {
+                        return false;
+                }
+        });
+
+        ipcMain.handle('agent:listProviders', async () => {
+                // Return the list of registered providers with their active models.
+                return [
+                        { type: 'anthropic', displayName: 'Anthropic', activeModel: aiService?.getProvider('anthropic')?.getActiveModel()?.id ?? '' },
+                        { type: 'nvidia-nim', displayName: 'NVIDIA NIM', activeModel: aiService?.getProvider('nvidia-nim')?.getActiveModel()?.id ?? '' },
+                ];
+        });
+
+        ipcMain.handle('agent:getActiveProvider', async () => {
+                if (!aiService) return 'anthropic';
+                return aiService.activeProviderType ?? 'anthropic';
+        });
+
         // ---- Pending changes ----
         ipcMain.handle('pending:accept', async (_event: Electron.IpcMainInvokeEvent, filePath: string) => {
                 // Use platform Uri to resolve and accept

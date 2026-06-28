@@ -22,6 +22,9 @@ const api = {
         skipMilestone: () => ipcRenderer.invoke('agent:skipMilestone'),
         listModels: () => ipcRenderer.invoke('agent:listModels'),
         setModel: (modelId: string) => ipcRenderer.invoke('agent:setModel', modelId),
+        switchProvider: (providerType: string) => ipcRenderer.invoke('agent:switchProvider', providerType),
+        listProviders: () => ipcRenderer.invoke('agent:listProviders'),
+        getActiveProvider: () => ipcRenderer.invoke('agent:getActiveProvider'),
 
         // ---- Pending changes ----
         acceptChange: (filePath: string) => ipcRenderer.invoke('pending:accept', filePath),

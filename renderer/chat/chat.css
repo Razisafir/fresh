@@ -161,6 +161,21 @@ html, body {
   border-color: var(--accent);
 }
 
+#provider-select {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: var(--font-size-sm);
+  max-width: 130px;
+  cursor: pointer;
+}
+
+#provider-select:hover {
+  border-color: var(--accent);
+}
+
 /* --------------------------------------------------------------------------
    Mode toggle (Chat / Plan segmented control)
    -------------------------------------------------------------------------- */
@@ -673,6 +688,11 @@ html, body {
 
 .modal-content input:focus {
   border-color: var(--border-focus);
+}
+
+.settings-scroll {
+  max-height: 80vh;
+  overflow-y: auto;
 }
 
 .modal-actions {

@@ -1,0 +1,512 @@
+/**
+ * nvidiaProvider.ts — IConstructAIProvider for NVIDIA NIM / AI Foundation.
+ *
+ * NVIDIA's API is OpenAI-compatible, so we use the
+ * `https://integrate.api.nvidia.com/v1/chat/completions` endpoint
+ * with SSE streaming, following the same patterns as anthropicProvider.ts
+ * but using the OpenAI message/tool format.
+ *
+ * Supported models (free tier available with API key from build.nvidia.com):
+ *   - meta/llama-3.3-70b-instruct
+ *   - meta/llama-3.1-405b-instruct
+ *   - mistralai/mixtral-8x22b-instruct-v0.1
+ *   - nvidia/llama-3.1-nemotron-70b-instruct
+ *   - deepseek-ai/deepseek-r1
+ *   - and more at https://build.nvidia.com/explore/reasoning
+ */
+
+import { logger } from '../../util/logger';
+import { redactSecrets } from '../../security/secretRedactor';
+import {
+	AIProviderType,
+	ProviderStatus,
+} from '../../types/llm';
+import type {
+	AIStreamEvent,
+	IChatMessage,
+	IChatOptions,
+	ICompleteOptions,
+	ICompleteResult,
+	IConstructAIProvider,
+	IModelInfo,
+	IToolDefinition,
+} from '../../types/llm';
+import type { ISecrets } from '../../types/platform';
+import { getAppState } from '../../platform/appState';
+
+const NVIDIA_API_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+const NVIDIA_MODELS_URL = 'https://integrate.api.nvidia.com/v1/models';
+const DEFAULT_NVIDIA_MODEL = 'meta/llama-3.3-70b-instruct';
+const FALLBACK_MODELS = [
+	'meta/llama-3.3-70b-instruct',
+	'meta/llama-3.1-405b-instruct',
+	'mistralai/mixtral-8x22b-instruct-v0.1',
+	'nvidia/llama-3.1-nemotron-70b-instruct',
+	'deepseek-ai/deepseek-r1',
+];
+const MAX_RETRIES = 3;
+const SECRET_KEY = 'kovix.apiKey.nvidia-nim';
+
+// ---------------------------------------------------------------------------
+// Minimal Disposable + EventEmitter (same as anthropicProvider)
+// ---------------------------------------------------------------------------
+
+interface Disposable {
+	dispose(): void;
+}
+
+class EventEmitter<T> {
+	private listeners: Array<(data: T) => void> = [];
+
+	get event(): (listener: (data: T) => void) => { dispose(): void } {
+		return (listener: (data: T) => void) => {
+			this.listeners.push(listener);
+			return {
+				dispose: () => {
+					const idx = this.listeners.indexOf(listener);
+					if (idx >= 0) { this.listeners.splice(idx, 1); }
+				},
+			};
+		};
+	}
+
+	fire(data: T): void {
+		for (const listener of [...this.listeners]) {
+			try { listener(data); } catch {
+				// Swallow
+			}
+		}
+	}
+
+	dispose(): void {
+		this.listeners = [];
+	}
+}
+
+// ---------------------------------------------------------------------------
+// NVIDIA SSE chunk types (OpenAI-compatible format)
+// ---------------------------------------------------------------------------
+
+interface INvidiaSSEChunk {
+	id?: string;
+	object?: string;
+	choices?: Array<{
+		index?: number;
+		delta?: {
+			role?: string;
+			content?: string;
+			tool_calls?: Array<{
+				index?: number;
+				id?: string;
+				type?: string;
+				function?: {
+					name?: string;
+					arguments?: string;
+				};
+			}>;
+		};
+		finish_reason?: string;
+	}>;
+	error?: { message?: string; type?: string; code?: string };
+}
+
+// ---------------------------------------------------------------------------
+// NvidiaProvider
+// ---------------------------------------------------------------------------
+
+export class NvidiaProvider implements IConstructAIProvider, Disposable {
+
+	readonly providerType: AIProviderType = 'nvidia-nim';
+
+	private _activeModel: IModelInfo | undefined;
+	private _status: ProviderStatus = ProviderStatus.Unknown;
+	private _cachedModels: IModelInfo[] = [];
+	private _apiKey: string | undefined;
+
+	private readonly _onDidChangeActiveModel = new EventEmitter<IModelInfo | undefined>();
+	readonly onDidChangeActiveModel = this._onDidChangeActiveModel.event;
+	private readonly _onDidChangeStatus = new EventEmitter<ProviderStatus>();
+	readonly onDidChangeStatus = this._onDidChangeStatus.event;
+
+	constructor(private readonly secrets: ISecrets) {
+		const configuredModel = getAppState().config.llmActiveModel || DEFAULT_NVIDIA_MODEL;
+
+		this._activeModel = {
+			id: configuredModel || DEFAULT_NVIDIA_MODEL,
+			displayName: configuredModel || 'Llama 3.3 70B',
+			provider: 'nvidia-nim',
+			contextWindowTokens: 128_000,
+			supportsTools: true,
+			supportsStreaming: true,
+		};
+
+		logger.info(redactSecrets('[NvidiaProvider] Initialized (default model: ' + this._activeModel.id + ')'));
+	}
+
+	isOffline(): boolean {
+		return false;
+	}
+
+	private async _resolveApiKey(): Promise<string | undefined> {
+		this._apiKey = await this.secrets.get(SECRET_KEY);
+		return this._apiKey;
+	}
+
+	private _setStatus(status: ProviderStatus): void {
+		if (this._status !== status) {
+			this._status = status;
+			this._onDidChangeStatus.fire(status);
+		}
+	}
+
+	async checkStatus(): Promise<ProviderStatus> {
+		const key = await this._resolveApiKey();
+		if (!key) {
+			this._setStatus(ProviderStatus.NoModels);
+			return this._status;
+		}
+
+		try {
+			const response = await fetch(NVIDIA_MODELS_URL, {
+				headers: {
+					'Authorization': `Bearer ${key}`,
+				},
+			});
+			if (response.ok) {
+				this._setStatus(ProviderStatus.Available);
+			} else if (response.status === 401 || response.status === 403) {
+				this._setStatus(ProviderStatus.NoModels);
+			} else {
+				this._setStatus(ProviderStatus.Unreachable);
+			}
+		} catch {
+			this._setStatus(ProviderStatus.Unreachable);
+		}
+
+		return this._status;
+	}
+
+	async *chat(
+		messages: IChatMessage[],
+		tools: IToolDefinition[],
+		options?: IChatOptions,
+	): AsyncIterable<AIStreamEvent> {
+		const key = await this._resolveApiKey();
+		if (!key) {
+			yield { type: 'error', text: 'NVIDIA API key not set. Set it via the settings dialog.' };
+			return;
+		}
+
+		const body = this.buildRequestBody(messages, tools, options);
+
+		let retries = 0;
+		while (retries < MAX_RETRIES) {
+			try {
+				const response = await fetch(NVIDIA_API_URL, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'Authorization': `Bearer ${key}`,
+						'Accept': 'text/event-stream',
+					},
+					body: JSON.stringify(body),
+					signal: options?.signal,
+				});
+
+				if (response.status === 429) {
+					const retryAfter = response.headers.get('retry-after');
+					const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : 2000 * (retries + 1);
+					logger.warn(`[NvidiaProvider] Rate limited, retrying in ${waitMs}ms (attempt ${retries + 1}/${MAX_RETRIES})`);
+					await new Promise(r => setTimeout(r, waitMs));
+					retries++;
+					continue;
+				}
+
+				if (response.status === 529 || response.status >= 500) {
+					const waitMs = 2000 * (retries + 1);
+					logger.warn(`[NvidiaProvider] Server error ${response.status}, retrying in ${waitMs}ms (attempt ${retries + 1}/${MAX_RETRIES})`);
+					await new Promise(r => setTimeout(r, waitMs));
+					retries++;
+					continue;
+				}
+
+				if (response.status === 401 || response.status === 403) {
+					yield { type: 'error', text: 'NVIDIA API key is invalid or revoked.' };
+					return;
+				}
+
+				if (!response.ok) {
+					const errorText = await response.text().catch(() => 'unknown');
+					yield { type: 'error', text: `NVIDIA API error (${response.status}): ${errorText}` };
+					return;
+				}
+
+				// Parse SSE stream (OpenAI format)
+				yield* this.parseSSEStream(response, options?.signal);
+				return;
+			} catch (error) {
+				if (error instanceof Error && error.name === 'AbortError') {
+					return;
+				}
+				const msg = error instanceof Error ? error.message : String(error);
+				logger.error(`[NvidiaProvider] Request failed: ${msg}`);
+				yield { type: 'error', text: `NVIDIA request failed: ${msg}` };
+				return;
+			}
+		}
+
+		yield { type: 'error', text: 'NVIDIA API: max retries exceeded.' };
+	}
+
+	private buildRequestBody(
+		messages: IChatMessage[],
+		tools: IToolDefinition[],
+		options?: IChatOptions,
+	): Record<string, unknown> {
+		const openaiMessages = this.convertToOpenAIMessages(messages, options?.systemPrompt);
+		const openaiTools = tools.length > 0 ? this.convertToOpenAITools(tools) : undefined;
+
+		const body: Record<string, unknown> = {
+			model: this._activeModel?.id ?? DEFAULT_NVIDIA_MODEL,
+			max_tokens: options?.maxTokens ?? 4096,
+			messages: openaiMessages,
+			stream: true,
+		};
+
+		if (openaiTools && openaiTools.length > 0) {
+			body.tools = openaiTools;
+		}
+
+		// Only include temperature when explicitly provided.
+		if (options?.temperature !== undefined) {
+			body.temperature = options.temperature;
+		}
+
+		return body;
+	}
+
+	private convertToOpenAIMessages(messages: IChatMessage[], systemPrompt?: string): unknown[] {
+		const result: unknown[] = [];
+
+		// Add system prompt as the first message if provided.
+		if (systemPrompt) {
+			result.push({ role: 'system', content: systemPrompt });
+		}
+
+		for (const m of messages) {
+			if (m.role === 'system') {
+				// System messages are handled above via systemPrompt.
+				continue;
+			}
+
+			if (m.role === 'tool') {
+				result.push({
+					role: 'tool',
+					tool_call_id: m.toolCallId ?? '',
+					content: m.content,
+				});
+				continue;
+			}
+
+			if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
+				const toolCalls = m.toolCalls.map(tc => ({
+					id: tc.id,
+					type: 'function',
+					function: {
+						name: tc.name,
+						arguments: tc.arguments || '{}',
+					},
+				}));
+				result.push({
+					role: 'assistant',
+					content: m.content || null,
+					tool_calls: toolCalls,
+				});
+				continue;
+			}
+
+			result.push({ role: m.role, content: m.content });
+		}
+
+		return result;
+	}
+
+	private convertToOpenAITools(tools: IToolDefinition[]): unknown[] {
+		return tools.map(t => ({
+			type: 'function',
+			function: {
+				name: t.name,
+				description: t.description,
+				parameters: t.inputSchema,
+			},
+		}));
+	}
+
+	private async *parseSSEStream(response: Response, signal?: AbortSignal): AsyncIterable<AIStreamEvent> {
+		const reader = response.body?.getReader();
+		if (!reader) {
+			yield { type: 'error', text: 'NVIDIA API returned empty body.' };
+			return;
+		}
+
+		const decoder = new TextDecoder();
+		let buffer = '';
+		// Track tool calls across chunks (OpenAI streams tool calls incrementally)
+		const pendingToolCalls = new Map<number, { id: string; name: string; arguments: string }>();
+
+		try {
+			while (true) {
+				if (signal?.aborted) return;
+
+				const { done, value } = await reader.read();
+				if (done) break;
+
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split('\n');
+				buffer = lines.pop() ?? '';
+
+				for (const line of lines) {
+					const trimmed = line.trim();
+					if (!trimmed || trimmed.startsWith('event:')) continue;
+
+					if (trimmed.startsWith('data:')) {
+						const jsonStr = trimmed.slice(5).trim();
+						if (!jsonStr || jsonStr === '[DONE]') continue;
+
+						try {
+							const chunk = JSON.parse(jsonStr) as INvidiaSSEChunk;
+
+							if (chunk.error) {
+								yield { type: 'error', text: chunk.error.message ?? 'Unknown NVIDIA stream error' };
+								return;
+							}
+
+							if (chunk.choices && chunk.choices.length > 0) {
+								const choice = chunk.choices[0];
+								const delta = choice.delta;
+
+								if (delta?.content) {
+									yield { type: 'token', text: delta.content };
+								}
+
+								// Handle tool calls in delta
+								if (delta?.tool_calls && delta.tool_calls.length > 0) {
+									for (const tc of delta.tool_calls) {
+										const idx = tc.index ?? 0;
+
+										if (tc.id) {
+											// New tool call starting
+											const name = tc.function?.name ?? '';
+											pendingToolCalls.set(idx, {
+												id: tc.id,
+												name,
+												arguments: '',
+											});
+											yield { type: 'tool_start', toolId: tc.id, toolName: name };
+										}
+
+										if (tc.function?.arguments) {
+											const pending = pendingToolCalls.get(idx);
+											if (pending) {
+												pending.arguments += tc.function.arguments;
+												yield { type: 'tool_input', toolId: pending.id, text: tc.function.arguments };
+											}
+										}
+									}
+								}
+
+								// Tool call finished
+								if (choice.finish_reason === 'tool_calls' || choice.finish_reason === 'stop') {
+									// Complete any pending tool calls
+									if (choice.finish_reason === 'tool_calls') {
+										for (const [, tc] of pendingToolCalls) {
+											let toolInput: unknown;
+											try {
+												toolInput = JSON.parse(tc.arguments);
+											} catch {
+												toolInput = {};
+											}
+											yield { type: 'tool_end', toolId: tc.id, toolName: tc.name, toolInput };
+										}
+									}
+									pendingToolCalls.clear();
+									yield { type: 'done', stopReason: choice.finish_reason ?? 'stop' };
+								}
+							}
+						} catch {
+							// Malformed JSON — skip.
+						}
+					}
+				}
+			}
+		} finally {
+			reader.releaseLock();
+		}
+	}
+
+	async complete(_prefix: string, _suffix: string, _options?: ICompleteOptions): Promise<ICompleteResult> {
+		return { text: '', finished: true };
+	}
+
+	async listModels(): Promise<IModelInfo[]> {
+		if (this._cachedModels.length > 0) return this._cachedModels;
+
+		const key = await this._resolveApiKey();
+		if (!key) return [];
+
+		try {
+			const response = await fetch(NVIDIA_MODELS_URL, {
+				headers: {
+					'Authorization': `Bearer ${key}`,
+				},
+			});
+			if (response.ok) {
+				const data = await response.json() as { data: Array<{ id: string; owned_by?: string }> };
+				this._cachedModels = data.data
+					.filter(m => m.id && !m.id.includes('embed') && !m.id.includes('retrieval'))
+					.map(m => ({
+						id: m.id,
+						displayName: m.id.split('/').pop() ?? m.id,
+						provider: 'nvidia-nim' as AIProviderType,
+						contextWindowTokens: 128_000,
+						supportsTools: true,
+						supportsStreaming: true,
+					}));
+				return this._cachedModels;
+			}
+		} catch {
+			// Fallback to default models.
+		}
+
+		return this._activeModel ? [this._activeModel] : FALLBACK_MODELS.map(id => ({
+			id,
+			displayName: id.split('/').pop() ?? id,
+			provider: 'nvidia-nim' as AIProviderType,
+			contextWindowTokens: 128_000,
+			supportsTools: true,
+			supportsStreaming: true,
+		}));
+	}
+
+	getActiveModel(): IModelInfo | undefined {
+		return this._activeModel;
+	}
+
+	async setActiveModel(modelId: string): Promise<boolean> {
+		this._activeModel = {
+			id: modelId,
+			displayName: modelId.split('/').pop() ?? modelId,
+			provider: 'nvidia-nim',
+			contextWindowTokens: 128_000,
+			supportsTools: true,
+			supportsStreaming: true,
+		};
+		this._onDidChangeActiveModel.fire(this._activeModel);
+		return true;
+	}
+
+	dispose(): void {
+		this._onDidChangeActiveModel.dispose();
+		this._onDidChangeStatus.dispose();
+	}
+}

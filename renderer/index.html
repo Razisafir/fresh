@@ -16,6 +16,10 @@
         <span class="title">Kovix</span>
       </div>
       <div class="header-right">
+        <select id="provider-select" title="Select AI provider">
+          <option value="anthropic">Anthropic</option>
+          <option value="nvidia-nim">NVIDIA NIM</option>
+        </select>
         <select id="model-select" title="Select model"><option value="">Loading models…</option></select>
         <div class="mode-toggle" id="mode-toggle">
           <button class="mode-btn active" data-mode="chat" id="btn-mode-chat">Chat</button>
@@ -51,8 +55,18 @@
   <div id="api-key-modal" class="modal hidden">
     <div class="modal-content">
       <h2>Set API Key</h2>
-      <p>Enter your Anthropic API key to get started.</p>
-      <input id="api-key-input" type="password" placeholder="sk-ant-…">
+      <p>Choose a provider and enter your API key.</p>
+      <div class="settings-group">
+        <label>Provider</label>
+        <select id="api-key-provider" style="width:100%;padding:8px;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:14px;">
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="nvidia-nim">NVIDIA NIM (Free models!)</option>
+        </select>
+      </div>
+      <div class="settings-group">
+        <label>API Key</label>
+        <input id="api-key-input" type="password" placeholder="Paste your API key…">
+      </div>
       <div class="modal-actions">
         <button id="btn-save-key" class="btn-primary">Save</button>
         <button id="btn-cancel-key" class="btn-secondary">Cancel</button>
@@ -62,12 +76,18 @@
 
   <!-- Settings modal -->
   <div id="settings-modal" class="modal hidden">
-    <div class="modal-content">
+    <div class="modal-content settings-scroll">
       <h2>Settings</h2>
       <div class="settings-group">
         <label>Anthropic API Key</label>
         <input id="settings-anthropic-key" type="password" placeholder="sk-ant-…">
         <button id="btn-save-anthropic-key" class="btn-small btn-primary">Save</button>
+      </div>
+      <div class="settings-group">
+        <label>NVIDIA NIM API Key</label>
+        <p style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">Free at <a href="https://build.nvidia.com" style="color:var(--accent)">build.nvidia.com</a> — 1000 credits/day</p>
+        <input id="settings-nvidia-key" type="password" placeholder="nvapi-…">
+        <button id="btn-save-nvidia-key" class="btn-small btn-primary">Save</button>
       </div>
       <div class="modal-actions">
         <button id="btn-close-settings" class="btn-secondary">Close</button>

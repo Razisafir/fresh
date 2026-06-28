@@ -26,7 +26,11 @@ const btnSettings = document.getElementById('btn-settings');
 const settingsModal = document.getElementById('settings-modal');
 const settingsAnthropicKey = document.getElementById('settings-anthropic-key');
 const btnSaveAnthropicKey = document.getElementById('btn-save-anthropic-key');
+const settingsNvidiaKey = document.getElementById('settings-nvidia-key');
+const btnSaveNvidiaKey = document.getElementById('btn-save-nvidia-key');
 const btnCloseSettings = document.getElementById('btn-close-settings');
+const providerSelect = document.getElementById('provider-select');
+const apiKeyProvider = document.getElementById('api-key-provider');
 const pendingBar = document.getElementById('pending-bar');
 const pendingCount = document.getElementById('pending-count');
 const btnAcceptAll = document.getElementById('btn-accept-all');
@@ -45,6 +49,7 @@ let state = 'idle'; // idle | planning | awaiting_approval | executing | complet
 let currentMode = 'chat'; // 'chat' | 'plan'
 let _currentPlan = null;
 let streamingMessage = null;
+let activeProvider = 'anthropic'; // 'anthropic' | 'nvidia-nim'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -432,10 +437,19 @@ btnRejectAll.addEventListener('click', async () => {
 // API key modal
 btnSaveKey.addEventListener('click', async () => {
   const key = apiKeyInput.value.trim();
+  const selectedProvider = apiKeyProvider ? apiKeyProvider.value : 'anthropic';
   if (key) {
-    await api.setSecret('kovix.apiKey.anthropic', key);
+    const secretKey = selectedProvider === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : 'kovix.apiKey.anthropic';
+    await api.setSecret(secretKey, key);
+    // Switch to this provider
+    const ok = await api.switchProvider(selectedProvider);
+    if (ok) {
+      activeProvider = selectedProvider;
+      if (providerSelect) providerSelect.value = selectedProvider;
+    }
     apiKeyModal.classList.add('hidden');
-    addMessage('system', '🔑 API key saved.');
+    addMessage('system', `🔑 API key saved for ${selectedProvider === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}.`);
+    await loadModels();
   }
 });
 
@@ -480,13 +494,40 @@ modelSelect.addEventListener('change', async () => {
   }
 });
 
+// Provider selector
+if (providerSelect) {
+  providerSelect.addEventListener('change', async () => {
+    const providerType = providerSelect.value;
+    const secretKey = providerType === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : 'kovix.apiKey.anthropic';
+    const hasKey = await api.getSecret(secretKey);
+    if (!hasKey) {
+      // No key for this provider — open settings
+      addMessage('system', `No API key set for ${providerType === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}. Set it in Settings.`);
+      settingsModal.classList.remove('hidden');
+      providerSelect.value = activeProvider;
+      return;
+    }
+    const ok = await api.switchProvider(providerType);
+    if (ok) {
+      activeProvider = providerType;
+      addMessage('system', `Switched to ${providerType === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}.`);
+      await loadModels();
+    } else {
+      addMessage('system', `Failed to switch to ${providerType}. Check your API key.`);
+      providerSelect.value = activeProvider;
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Settings modal
 // ---------------------------------------------------------------------------
 
 btnSettings.addEventListener('click', async () => {
-  const key = await api.getSecret('kovix.apiKey.anthropic');
-  settingsAnthropicKey.value = key || '';
+  const anthropicKey = await api.getSecret('kovix.apiKey.anthropic');
+  const nvidiaKey = await api.getSecret('kovix.apiKey.nvidia-nim');
+  settingsAnthropicKey.value = anthropicKey || '';
+  if (settingsNvidiaKey) settingsNvidiaKey.value = nvidiaKey || '';
   settingsModal.classList.remove('hidden');
 });
 
@@ -498,21 +539,52 @@ btnSaveAnthropicKey.addEventListener('click', async () => {
   const key = settingsAnthropicKey.value.trim();
   if (key) {
     await api.setSecret('kovix.apiKey.anthropic', key);
-    addMessage('system', 'API key saved. Refreshing models…');
+    addMessage('system', 'Anthropic API key saved. Refreshing models…');
     settingsModal.classList.add('hidden');
     await loadModels();
   }
 });
+
+if (btnSaveNvidiaKey) {
+  btnSaveNvidiaKey.addEventListener('click', async () => {
+    const key = settingsNvidiaKey.value.trim();
+    if (key) {
+      await api.setSecret('kovix.apiKey.nvidia-nim', key);
+      addMessage('system', 'NVIDIA API key saved. Switching provider…');
+      settingsModal.classList.add('hidden');
+      // Auto-switch to NVIDIA
+      const ok = await api.switchProvider('nvidia-nim');
+      if (ok) {
+        activeProvider = 'nvidia-nim';
+        if (providerSelect) providerSelect.value = 'nvidia-nim';
+        addMessage('system', 'Switched to NVIDIA NIM.');
+      }
+      await loadModels();
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Init: check for API key on startup
 // ---------------------------------------------------------------------------
 
 (async function init() {
-  const key = await api.getSecret('kovix.apiKey.anthropic');
-  if (!key) {
+  // Check for any API key
+  const anthropicKey = await api.getSecret('kovix.apiKey.anthropic');
+  const nvidiaKey = await api.getSecret('kovix.apiKey.nvidia-nim');
+
+  if (!anthropicKey && !nvidiaKey) {
     apiKeyModal.classList.remove('hidden');
   }
+
+  // Restore active provider from config
+  try {
+    const provider = await api.getActiveProvider();
+    if (provider) {
+      activeProvider = provider;
+      if (providerSelect) providerSelect.value = provider;
+    }
+  } catch {}
 
   // Load models into the selector
   await loadModels();
@@ -524,7 +596,7 @@ btnSaveAnthropicKey.addEventListener('click', async () => {
   const appState = await api.getAppState();
   if (appState.workspaceRoots && appState.workspaceRoots.length > 0) {
     if (welcomeMsg) {
-      welcomeMsg.querySelector('p').textContent = `Workspace: ${appState.workspaceRoots.join(', ')}. Describe a task to get started.`;
+      welcomeMsg.querySelector('p').textContent = `Workspace: ${appState.workspaceRoots.join(', ')}. Ask anything to get started.`;
     }
   }
 })();

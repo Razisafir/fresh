@@ -10,19 +10,20 @@
 
 import { logger } from '../util/logger';
 import {
-	AIProviderType,
-	AIStreamEvent,
-	IChatMessage,
-	IChatOptions,
-	ICompleteOptions,
-	ICompleteResult,
-	IConstructAIProvider,
-	IConstructAIService,
-	IModelInfo,
-	IToolDefinition,
-	ProviderStatus,
+        AIProviderType,
+        AIStreamEvent,
+        IChatMessage,
+        IChatOptions,
+        ICompleteOptions,
+        ICompleteResult,
+        IConstructAIProvider,
+        IConstructAIService,
+        IModelInfo,
+        IToolDefinition,
+        ProviderStatus,
 } from '../types/llm';
 import { AnthropicProvider } from './providers/anthropicProvider';
+import { NvidiaProvider } from './providers/nvidiaProvider';
 import { getAppState } from '../platform/appState';
 
 // ---------------------------------------------------------------------------
@@ -30,35 +31,35 @@ import { getAppState } from '../platform/appState';
 // ---------------------------------------------------------------------------
 
 interface Disposable {
-	dispose(): void;
+        dispose(): void;
 }
 
 class EventEmitter<T> {
-	private listeners: Array<(data: T) => void> = [];
+        private listeners: Array<(data: T) => void> = [];
 
-	get event(): (listener: (data: T) => void) => { dispose(): void } {
-		return (listener: (data: T) => void) => {
-			this.listeners.push(listener);
-			return {
-				dispose: () => {
-					const idx = this.listeners.indexOf(listener);
-					if (idx >= 0) { this.listeners.splice(idx, 1); }
-				},
-			};
-		};
-	}
+        get event(): (listener: (data: T) => void) => { dispose(): void } {
+                return (listener: (data: T) => void) => {
+                        this.listeners.push(listener);
+                        return {
+                                dispose: () => {
+                                        const idx = this.listeners.indexOf(listener);
+                                        if (idx >= 0) { this.listeners.splice(idx, 1); }
+                                },
+                        };
+                };
+        }
 
-	fire(data: T): void {
-		for (const listener of [...this.listeners]) {
-			try { listener(data); } catch {
-				// Swallow errors in listeners.
-			}
-		}
-	}
+        fire(data: T): void {
+                for (const listener of [...this.listeners]) {
+                        try { listener(data); } catch {
+                                // Swallow errors in listeners.
+                        }
+                }
+        }
 
-	dispose(): void {
-		this.listeners = [];
-	}
+        dispose(): void {
+                this.listeners = [];
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -67,161 +68,174 @@ class EventEmitter<T> {
 
 export class ConstructAIService implements IConstructAIService, Disposable {
 
-	private readonly _providers = new Map<AIProviderType, IConstructAIProvider>();
-	private _activeProvider: IConstructAIProvider | undefined;
+        private readonly _providers = new Map<AIProviderType, IConstructAIProvider>();
+        private _activeProvider: IConstructAIProvider | undefined;
 
-	/** Active stream controller, aborted when switching providers. */
-	private _activeStreamController: AbortController | null = null;
+        /** Active stream controller, aborted when switching providers. */
+        private _activeStreamController: AbortController | null = null;
 
-	private readonly _onDidChangeActiveProvider = new EventEmitter<AIProviderType>();
-	readonly onDidChangeActiveProvider = this._onDidChangeActiveProvider.event;
-	private readonly _onDidChangeActiveModel = new EventEmitter<IModelInfo | undefined>();
-	readonly onDidChangeActiveModel = this._onDidChangeActiveModel.event;
+        private readonly _onDidChangeActiveProvider = new EventEmitter<AIProviderType>();
+        readonly onDidChangeActiveProvider = this._onDidChangeActiveProvider.event;
+        private readonly _onDidChangeActiveModel = new EventEmitter<IModelInfo | undefined>();
+        readonly onDidChangeActiveModel = this._onDidChangeActiveModel.event;
 
-	constructor() {
-		// Register the v0.1 provider.
-		const secrets = getAppState().secrets;
-		const anthropic = new AnthropicProvider(secrets);
-		this._providers.set('anthropic', anthropic);
+        constructor() {
+                const secrets = getAppState().secrets;
 
-		// Forward provider events.
-		anthropic.onDidChangeActiveModel(m => {
-			if (this._activeProvider === anthropic) {
-				this._onDidChangeActiveModel.fire(m);
-			}
-		});
-		anthropic.onDidChangeStatus(s => {
-			logger.verbose(`[ConstructAIService] anthropic status → ${s}`);
-		});
+                // Register Anthropic provider.
+                const anthropic = new AnthropicProvider(secrets);
+                this._providers.set('anthropic', anthropic);
 
-		// Pick the active provider from config (default: anthropic).
-		const configured = getAppState().config.llmActiveProvider as AIProviderType;
+                anthropic.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === anthropic) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                anthropic.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] anthropic status → ${s}`);
+                });
 
-		const initial = this._providers.get(configured) ?? this._providers.get('anthropic');
-		if (initial) {
-			this._setActiveProvider(initial.providerType);
-		}
+                // Register NVIDIA NIM provider.
+                const nvidia = new NvidiaProvider(secrets);
+                this._providers.set('nvidia-nim', nvidia);
 
-		logger.info(`[ConstructAIService] Initialized with ${this._providers.size} provider(s). Active: ${this._activeProvider?.providerType ?? 'none'}`);
-	}
+                nvidia.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === nvidia) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                nvidia.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] nvidia-nim status → ${s}`);
+                });
 
-	get activeProvider(): IConstructAIProvider | undefined {
-		return this._activeProvider;
-	}
+                // Pick the active provider from config (default: anthropic).
+                const configured = getAppState().config.llmActiveProvider as AIProviderType;
 
-	get activeProviderType(): AIProviderType | undefined {
-		return this._activeProvider?.providerType;
-	}
+                const initial = this._providers.get(configured) ?? this._providers.get('anthropic');
+                if (initial) {
+                        this._setActiveProvider(initial.providerType);
+                }
 
-	async *chat(
-		messages: IChatMessage[],
-		tools: IToolDefinition[],
-		options?: IChatOptions,
-	): AsyncIterable<AIStreamEvent> {
-		if (!this._activeProvider) {
-			yield {
-				type: 'error',
-				text: 'No AI provider available. Configure an API key via the settings.',
-			};
-			return;
-		}
+                logger.info(`[ConstructAIService] Initialized with ${this._providers.size} provider(s). Active: ${this._activeProvider?.providerType ?? 'none'}`);
+        }
 
-		// Bug 4 fix: create an AbortController so we can abort on provider switch.
-		const streamController = new AbortController();
-		this._activeStreamController = streamController;
-		if (options?.signal) {
-			options.signal.addEventListener('abort', () => streamController.abort());
-		}
+        get activeProvider(): IConstructAIProvider | undefined {
+                return this._activeProvider;
+        }
 
-		const mergedOptions: IChatOptions = {
-			...options,
-			signal: streamController.signal,
-		};
+        get activeProviderType(): AIProviderType | undefined {
+                return this._activeProvider?.providerType;
+        }
 
-		try {
-			yield* this._activeProvider.chat(messages, tools, mergedOptions);
-		} finally {
-			this._activeStreamController = null;
-		}
-	}
+        async *chat(
+                messages: IChatMessage[],
+                tools: IToolDefinition[],
+                options?: IChatOptions,
+        ): AsyncIterable<AIStreamEvent> {
+                if (!this._activeProvider) {
+                        yield {
+                                type: 'error',
+                                text: 'No AI provider available. Configure an API key via the settings.',
+                        };
+                        return;
+                }
 
-	async complete(
-		prefix: string,
-		suffix: string,
-		options?: ICompleteOptions,
-	): Promise<ICompleteResult> {
-		if (!this._activeProvider) {
-			return { text: '', finished: true };
-		}
-		return this._activeProvider.complete(prefix, suffix, options);
-	}
+                // Bug 4 fix: create an AbortController so we can abort on provider switch.
+                const streamController = new AbortController();
+                this._activeStreamController = streamController;
+                if (options?.signal) {
+                        options.signal.addEventListener('abort', () => streamController.abort());
+                }
 
-	async listModels(): Promise<IModelInfo[]> {
-		if (!this._activeProvider) {
-			return [];
-		}
-		return this._activeProvider.listModels();
-	}
+                const mergedOptions: IChatOptions = {
+                        ...options,
+                        signal: streamController.signal,
+                };
 
-	getActiveModel(): IModelInfo | undefined {
-		return this._activeProvider?.getActiveModel();
-	}
+                try {
+                        yield* this._activeProvider.chat(messages, tools, mergedOptions);
+                } finally {
+                        this._activeStreamController = null;
+                }
+        }
 
-	async setActiveModel(modelId: string): Promise<boolean> {
-		if (!this._activeProvider) {
-			return false;
-		}
-		return this._activeProvider.setActiveModel(modelId);
-	}
+        async complete(
+                prefix: string,
+                suffix: string,
+                options?: ICompleteOptions,
+        ): Promise<ICompleteResult> {
+                if (!this._activeProvider) {
+                        return { text: '', finished: true };
+                }
+                return this._activeProvider.complete(prefix, suffix, options);
+        }
 
-	isOffline(): boolean {
-		return this._activeProvider?.isOffline() ?? false;
-	}
+        async listModels(): Promise<IModelInfo[]> {
+                if (!this._activeProvider) {
+                        return [];
+                }
+                return this._activeProvider.listModels();
+        }
 
-	async switchProvider(providerType: AIProviderType): Promise<boolean> {
-		const provider = this._providers.get(providerType);
-		if (!provider) {
-			logger.warn(`[ConstructAIService] Provider not registered: ${providerType}. Available: ${Array.from(this._providers.keys()).join(', ')}`);
-			return false;
-		}
+        getActiveModel(): IModelInfo | undefined {
+                return this._activeProvider?.getActiveModel();
+        }
 
-		const status = await provider.checkStatus();
-		if (status !== ProviderStatus.Available) {
-			logger.warn(`[ConstructAIService] Provider ${providerType} not available (status: ${status}).`);
-			return false;
-		}
+        async setActiveModel(modelId: string): Promise<boolean> {
+                if (!this._activeProvider) {
+                        return false;
+                }
+                return this._activeProvider.setActiveModel(modelId);
+        }
 
-		this._setActiveProvider(providerType);
-		logger.info(`[ConstructAIService] Switched to provider: ${providerType}`);
-		return true;
-	}
+        isOffline(): boolean {
+                return this._activeProvider?.isOffline() ?? false;
+        }
 
-	getProvider(type: AIProviderType): IConstructAIProvider | undefined {
-		return this._providers.get(type);
-	}
+        async switchProvider(providerType: AIProviderType): Promise<boolean> {
+                const provider = this._providers.get(providerType);
+                if (!provider) {
+                        logger.warn(`[ConstructAIService] Provider not registered: ${providerType}. Available: ${Array.from(this._providers.keys()).join(', ')}`);
+                        return false;
+                }
 
-	// --- Private helpers ---
+                const status = await provider.checkStatus();
+                if (status !== ProviderStatus.Available) {
+                        logger.warn(`[ConstructAIService] Provider ${providerType} not available (status: ${status}).`);
+                        return false;
+                }
 
-	private _setActiveProvider(type: AIProviderType): void {
-		// Bug 4 fix: abort any in-flight stream before switching.
-		if (this._activeStreamController) {
-			this._activeStreamController.abort();
-			this._activeStreamController = null;
-		}
+                this._setActiveProvider(providerType);
+                logger.info(`[ConstructAIService] Switched to provider: ${providerType}`);
+                return true;
+        }
 
-		this._activeProvider = this._providers.get(type);
-		this._onDidChangeActiveProvider.fire(type);
-		if (this._activeProvider) {
-			this._onDidChangeActiveModel.fire(this._activeProvider.getActiveModel());
-		}
-	}
+        getProvider(type: AIProviderType): IConstructAIProvider | undefined {
+                return this._providers.get(type);
+        }
 
-	dispose(): void {
-		for (const provider of this._providers.values()) {
-			provider.dispose();
-		}
-		this._providers.clear();
-		this._onDidChangeActiveProvider.dispose();
-		this._onDidChangeActiveModel.dispose();
-	}
+        // --- Private helpers ---
+
+        private _setActiveProvider(type: AIProviderType): void {
+                // Bug 4 fix: abort any in-flight stream before switching.
+                if (this._activeStreamController) {
+                        this._activeStreamController.abort();
+                        this._activeStreamController = null;
+                }
+
+                this._activeProvider = this._providers.get(type);
+                this._onDidChangeActiveProvider.fire(type);
+                if (this._activeProvider) {
+                        this._onDidChangeActiveModel.fire(this._activeProvider.getActiveModel());
+                }
+        }
+
+        dispose(): void {
+                for (const provider of this._providers.values()) {
+                        provider.dispose();
+                }
+                this._providers.clear();
+                this._onDidChangeActiveProvider.dispose();
+                this._onDidChangeActiveModel.dispose();
+        }
 }
