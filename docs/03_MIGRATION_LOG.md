@@ -1446,3 +1446,93 @@ Per `02_ARCHITECTURE.md` §7, v0.1-alpha is "done" when:
 The 8 DEFERRED issues in `docs/ISSUES.md` (multi-root workspaces, file watcher, agent error recovery, snapshot/undo, MCP, semantic memory, cost governor, custom modes) are scheduled for v1.0-beta / v1.0 / v1.0-rc per their individual revisit dates. None block the v0.1-alpha demo.
 
 **Next: Phase 6 (Packaging & Deployment) — `vsce package`, marketplace metadata, cross-platform smoke test.**
+
+---
+
+## Harvest-1 — Small additive ports (harvest/full-run branch)
+
+### [2026-06-29] `src/llm/modelRouting.ts` — Reimplement (original branch deleted)
+
+**Source:** Kovix_2.0 `modelRouting.ts` (~250 LOC, was on `recovery/audit-tier1-patches` branch — DELETED from remote)
+**Destination:** `fresh/src/llm/modelRouting.ts`
+**Layer:** 1 (pure logic)
+**Port strategy:** Reimplement from description (original source unavailable)
+
+**Audit**
+- Dependencies (imports from old repo): None — zero imports
+- VS Code internals used: None
+- Security-relevant: no
+- Secrets in file: no
+- Stubbed/incomplete: no
+- Bug fixes applied: N/A (fresh implementation)
+- Decisions referenced: D-001 (file-by-file audit)
+
+**Translation notes**
+The original file was on `origin/recovery/audit-tier1-patches` which no longer exists in the Kovix_2.0 remote. This is a fresh implementation based on the HARVEST_CANDIDATES.md description: "ModelPurpose type and a routing decision function that maps purpose to appropriate model. Pure-logic file with no VS Code imports — fully unit-testable." Added support for all 3 current providers (Anthropic, NVIDIA NIM, OpenRouter) and 8 purpose types including the planned 'refinement' purpose for Idea Refinement Mode.
+
+**Verification**
+- [x] TypeScript compiles (verified by `npm run typecheck`)
+- [x] Imports resolve
+- [x] No `vscode` API misuse
+- [x] No leftover `createDecorator` / `_serviceBrand`
+- [x] No secrets / credentials
+
+### [2026-06-29] `src/agent/localUsageLogHelpers.ts` — Reimplement (original branch deleted)
+
+**Source:** Kovix_2.0 `localUsageLogHelpers.ts` (~210 LOC, was on `recovery/audit-tier1-patches` branch — DELETED from remote)
+**Destination:** `fresh/src/agent/localUsageLogHelpers.ts`
+**Layer:** 1 (pure logic)
+**Port strategy:** Reimplement from description (original source unavailable)
+
+**Audit**
+- Dependencies (imports from old repo): None — zero imports beyond TypeScript primitives
+- VS Code internals used: None
+- Security-relevant: no (local-only, no network calls)
+- Secrets in file: no
+- Stubbed/incomplete: no
+- Bug fixes applied: N/A (fresh implementation)
+- Decisions referenced: D-001 (file-by-file audit)
+
+**Translation notes**
+The original file was on `origin/recovery/audit-tier1-patches` which no longer exists. Fresh implementation based on HARVEST_CANDIDATES.md: "15 typed event names. Pure-logic and unit-testable." Implements IUsageEvent with 15 typed event names, JSONL formatting, filtering by name/session/time/provider, and aggregation helpers (count, sum tokens, sum cost, average duration, success rate).
+
+**Verification**
+- [x] TypeScript compiles (verified by `npm run typecheck`)
+- [x] Imports resolve
+- [x] No `vscode` API misuse
+- [x] No leftover `createDecorator` / `_serviceBrand`
+- [x] No secrets / credentials
+
+### [2026-06-29] `src/agent/localUsageLog.ts` — Reimplement (original branch deleted)
+
+**Source:** Kovix_2.0 `localUsageLog.ts` (~255 LOC, was on `recovery/audit-tier1-patches` branch — DELETED from remote)
+**Destination:** `fresh/src/agent/localUsageLog.ts`
+**Layer:** 1 (pure logic + Node.js fs)
+**Port strategy:** Reimplement from description (original source unavailable)
+
+**Audit**
+- Dependencies (imports from old repo): localUsageLogHelpers.ts (same repo), Node.js fs/promises, path, os
+- VS Code internals used: None (replaced with Node.js fs)
+- Security-relevant: yes — writes to user's local disk only, never sends data externally
+- Secrets in file: no
+- Stubbed/incomplete: no
+- Bug fixes applied: N/A (fresh implementation)
+- Decisions referenced: D-001 (file-by-file audit)
+
+**Translation notes**
+The original used VS Code's IOutputChannel for logging, replaced with Node.js fs.appendFile. Implements fire-and-forget writing with buffered writes to prevent interleaved appends. Log rotation at configurable size (default 10MB) with max 5 rotated files. Singleton pattern for global access.
+
+**Verification**
+- [x] TypeScript compiles (verified by `npm run typecheck`)
+- [x] Imports resolve
+- [x] No `vscode` API misuse
+- [x] No leftover `createDecorator` / `_serviceBrand`
+- [x] No secrets / credentials
+
+### skip-milestone semantics verification
+
+**Finding:** Fresh's existing `milestoneExecutor.ts` already contains the correct skip semantics. The `AwaitResumeFn` returns `'resume' | 'skip'` and the code branches properly:
+- 'skip' → emits `milestone_skipped`, does NOT emit `milestone_completed`, continues to next milestone
+- 'resume' → emits `milestone_resumed` + `milestone_completed` normally
+
+This is the fix that was on `fix/skip-milestone-real-semantics` in Kovix_2.0. It was already incorporated during the initial port to fresh. The existing test suite confirms this with the test: "marks milestone as SKIPPED (not completed) when awaitResume returns 'skip'". No additional port needed.
