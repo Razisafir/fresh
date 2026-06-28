@@ -289,6 +289,29 @@ function registerIpcHandlers(): void {
                 agentLoop.skipCurrentMilestone();
         });
 
+        ipcMain.handle('agent:listModels', async () => {
+                if (!aiService || !aiService.activeProvider) return [];
+                try {
+                        return await aiService.activeProvider.listModels();
+                } catch {
+                        return [];
+                }
+        });
+
+        ipcMain.handle('agent:setModel', async (_event: Electron.IpcMainInvokeEvent, modelId: string) => {
+                if (!aiService || !aiService.activeProvider) return false;
+                try {
+                        const ok = await aiService.activeProvider.setActiveModel(modelId);
+                        if (ok) {
+                                // Persist the model choice
+                                getAppState().config.llmActiveModel = modelId;
+                        }
+                        return ok;
+                } catch {
+                        return false;
+                }
+        });
+
         // ---- Pending changes ----
         ipcMain.handle('pending:accept', async (_event: Electron.IpcMainInvokeEvent, filePath: string) => {
                 // Use platform Uri to resolve and accept

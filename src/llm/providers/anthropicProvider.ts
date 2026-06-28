@@ -30,7 +30,16 @@ import { getAppState } from '../../platform/appState';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_MODELS_URL = 'https://api.anthropic.com/v1/models';
+// Valid Anthropic model IDs. The default must be a real model ID that the
+// Anthropic API actually accepts. The listModels() endpoint fetches the
+// authoritative list at runtime; this fallback is for when the API is unreachable.
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+const FALLBACK_MODELS = [
+        'claude-sonnet-4-20250514',
+        'claude-3-5-sonnet-20241022',
+        'claude-3-5-haiku-20241022',
+        'claude-3-opus-20240229',
+];
 const MAX_RETRIES = 3;
 const SECRET_KEY = 'kovix.apiKey.anthropic';
 
@@ -390,7 +399,14 @@ export class AnthropicProvider implements IConstructAIProvider, Disposable {
                         // Fallback to default model.
                 }
 
-                return this._activeModel ? [this._activeModel] : [];
+                return this._activeModel ? [this._activeModel] : FALLBACK_MODELS.map(id => ({
+                        id,
+                        displayName: id,
+                        provider: 'anthropic' as AIProviderType,
+                        contextWindowTokens: 200_000,
+                        supportsTools: true,
+                        supportsStreaming: true,
+                }));
         }
 
         getActiveModel(): IModelInfo | undefined {

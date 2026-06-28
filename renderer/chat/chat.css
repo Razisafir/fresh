@@ -127,6 +127,7 @@ html, body {
 .header-right {
   display: flex;
   gap: var(--space-xs);
+  align-items: center;
 }
 
 .header-right button {
@@ -143,6 +144,49 @@ html, body {
 .header-right button:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+#model-select {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: var(--font-size-sm);
+  max-width: 200px;
+  cursor: pointer;
+}
+
+#model-select:hover {
+  border-color: var(--accent);
+}
+
+/* Settings modal */
+.settings-group {
+  margin-bottom: var(--space-md);
+}
+
+.settings-group label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.settings-group input {
+  width: 100%;
+  padding: var(--space-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  margin-bottom: var(--space-xs);
+  box-sizing: border-box;
+}
+
+.settings-group .btn-small {
+  margin-top: var(--space-xs);
 }
 
 /* --------------------------------------------------------------------------

@@ -16,6 +16,7 @@
         <span class="title">Kovix</span>
       </div>
       <div class="header-right">
+        <select id="model-select" title="Select model"><option value="">Loading models…</option></select>
         <button id="btn-folder" title="Open folder">📂</button>
         <button id="btn-settings" title="Settings">⚙️</button>
       </div>
@@ -51,6 +52,21 @@
       <div class="modal-actions">
         <button id="btn-save-key" class="btn-primary">Save</button>
         <button id="btn-cancel-key" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Settings</h2>
+      <div class="settings-group">
+        <label>Anthropic API Key</label>
+        <input id="settings-anthropic-key" type="password" placeholder="sk-ant-…">
+        <button id="btn-save-anthropic-key" class="btn-small btn-primary">Save</button>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-close-settings" class="btn-secondary">Close</button>
       </div>
     </div>
   </div>

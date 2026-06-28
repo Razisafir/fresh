@@ -19,6 +19,8 @@ const api = {
         cancelPlan: () => ipcRenderer.invoke('agent:cancelPlan'),
         resumeMilestone: () => ipcRenderer.invoke('agent:resumeMilestone'),
         skipMilestone: () => ipcRenderer.invoke('agent:skipMilestone'),
+        listModels: () => ipcRenderer.invoke('agent:listModels'),
+        setModel: (modelId: string) => ipcRenderer.invoke('agent:setModel', modelId),
 
         // ---- Pending changes ----
         acceptChange: (filePath: string) => ipcRenderer.invoke('pending:accept', filePath),

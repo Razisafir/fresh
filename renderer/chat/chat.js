@@ -21,6 +21,12 @@ const messageList = document.getElementById('message-list');
 const inputBox = document.getElementById('input-box');
 const btnSend = document.getElementById('btn-send');
 const btnFolder = document.getElementById('btn-folder');
+const modelSelect = document.getElementById('model-select');
+const btnSettings = document.getElementById('btn-settings');
+const settingsModal = document.getElementById('settings-modal');
+const settingsAnthropicKey = document.getElementById('settings-anthropic-key');
+const btnSaveAnthropicKey = document.getElementById('btn-save-anthropic-key');
+const btnCloseSettings = document.getElementById('btn-close-settings');
 const pendingBar = document.getElementById('pending-bar');
 const pendingCount = document.getElementById('pending-count');
 const btnAcceptAll = document.getElementById('btn-accept-all');
@@ -399,6 +405,67 @@ btnCancelKey.addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Model selector
+// ---------------------------------------------------------------------------
+
+async function loadModels() {
+  try {
+    const models = await api.listModels();
+    if (!models || models.length === 0) {
+      modelSelect.innerHTML = '<option value="">No models available</option>';
+      return;
+    }
+    const config = await api.getConfig();
+    const currentModel = config.llmActiveModel || '';
+    modelSelect.innerHTML = '';
+    for (const m of models) {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.displayName || m.id;
+      if (m.id === currentModel) opt.selected = true;
+      modelSelect.appendChild(opt);
+    }
+  } catch (err) {
+    modelSelect.innerHTML = '<option value="">Error loading models</option>';
+  }
+}
+
+modelSelect.addEventListener('change', async () => {
+  const modelId = modelSelect.value;
+  if (!modelId) return;
+  const ok = await api.setModel(modelId);
+  if (ok) {
+    addMessage('system', `Switched to model: ${modelId}`);
+  } else {
+    addMessage('system', `Failed to switch model to ${modelId}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Settings modal
+// ---------------------------------------------------------------------------
+
+btnSettings.addEventListener('click', async () => {
+  const key = await api.getSecret('kovix.apiKey.anthropic');
+  settingsAnthropicKey.value = key || '';
+  settingsModal.classList.remove('hidden');
+});
+
+btnCloseSettings.addEventListener('click', () => {
+  settingsModal.classList.add('hidden');
+});
+
+btnSaveAnthropicKey.addEventListener('click', async () => {
+  const key = settingsAnthropicKey.value.trim();
+  if (key) {
+    await api.setSecret('kovix.apiKey.anthropic', key);
+    addMessage('system', 'API key saved. Refreshing models…');
+    settingsModal.classList.add('hidden');
+    await loadModels();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Init: check for API key on startup
 // ---------------------------------------------------------------------------
 
@@ -407,6 +474,9 @@ btnCancelKey.addEventListener('click', () => {
   if (!key) {
     apiKeyModal.classList.remove('hidden');
   }
+
+  // Load models into the selector
+  await loadModels();
 
   // Check workspace roots
   const appState = await api.getAppState();
