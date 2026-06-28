@@ -114,6 +114,9 @@ import { runVerification, detectVerificationCommand } from './verification';
 
 const MAX_ROUNDS = 50;
 
+/** Per-LLM-call timeout (ms). 120s to accommodate slower NVIDIA/remote models. */
+const LLM_CALL_TIMEOUT_MS = 120_000;
+
 /**
  * Cached result of a tool execution, used to avoid double-execution
  * during the planning phase (the LLM streams tool_start → tool_end, and
@@ -322,7 +325,7 @@ export class AgentLoopService implements IAgentLoop {
 
                                 // 60s per-LLM-call timeout, chained with user's abort signal.
                                 const timeoutController = new AbortController();
-                                const timeoutId = setTimeout(() => timeoutController.abort(), 60_000);
+                                const timeoutId = setTimeout(() => timeoutController.abort(), LLM_CALL_TIMEOUT_MS);
                                 if (signal) {
                                         signal.addEventListener('abort', () => timeoutController.abort());
                                 }
@@ -378,7 +381,8 @@ export class AgentLoopService implements IAgentLoop {
                                 clearTimeout(timeoutId);
 
                                 // If there were tool calls, add assistant + tool result messages and continue.
-                                if (hadToolCalls && stopReason === 'tool_use') {
+                                // Both Anthropic ('tool_use') and OpenAI/NVIDIA ('tool_calls') stop reasons.
+                                if (hadToolCalls && (stopReason === 'tool_use' || stopReason === 'tool_calls')) {
                                         conversationMessages.push({
                                                 role: 'assistant',
                                                 content: currentText || '',
@@ -483,7 +487,7 @@ export class AgentLoopService implements IAgentLoop {
                                 let hasToolCalls = false;
 
                                 const timeoutController = new AbortController();
-                                const timeoutId = setTimeout(() => timeoutController.abort(), 60_000);
+                                const timeoutId = setTimeout(() => timeoutController.abort(), LLM_CALL_TIMEOUT_MS);
                                 if (signal) {
                                         signal.addEventListener('abort', () => timeoutController.abort());
                                 }
@@ -583,7 +587,8 @@ export class AgentLoopService implements IAgentLoop {
                                         }
                                 }
 
-                                if (stopReason === 'end_turn' || !hasToolCalls) {
+                                // Both Anthropic ('end_turn') and OpenAI/NVIDIA ('stop') stop reasons.
+                                if (stopReason === 'end_turn' || stopReason === 'stop' || !hasToolCalls) {
                                         finalSummary = currentText;
                                         break;
                                 }
@@ -652,7 +657,7 @@ export class AgentLoopService implements IAgentLoop {
                                 let hasToolCalls = false;
 
                                 const timeoutController = new AbortController();
-                                const timeoutId = setTimeout(() => timeoutController.abort(), 60_000);
+                                const timeoutId = setTimeout(() => timeoutController.abort(), LLM_CALL_TIMEOUT_MS);
                                 if (signal) {
                                         signal.addEventListener('abort', () => timeoutController.abort());
                                 }
@@ -752,7 +757,8 @@ export class AgentLoopService implements IAgentLoop {
                                         }
                                 }
 
-                                if (stopReason === 'end_turn' || !hasToolCalls) {
+                                // Both Anthropic ('end_turn') and OpenAI/NVIDIA ('stop') stop reasons.
+                                if (stopReason === 'end_turn' || stopReason === 'stop' || !hasToolCalls) {
                                         finalSummary = currentText;
                                         break;
                                 }
@@ -834,7 +840,7 @@ export class AgentLoopService implements IAgentLoop {
                                         let hasToolCalls = false;
 
                                         const timeoutController = new AbortController();
-                                        const timeoutId = setTimeout(() => timeoutController.abort(), 60_000);
+                                        const timeoutId = setTimeout(() => timeoutController.abort(), LLM_CALL_TIMEOUT_MS);
                                         if (sig) {
                                                 sig.addEventListener('abort', () => timeoutController.abort());
                                         }
@@ -932,7 +938,8 @@ export class AgentLoopService implements IAgentLoop {
                                                 }
                                         }
 
-                                        if (stopReason === 'end_turn' || !hasToolCalls) {
+                                        // Both Anthropic ('end_turn') and OpenAI/NVIDIA ('stop') stop reasons.
+                                        if (stopReason === 'end_turn' || stopReason === 'stop' || !hasToolCalls) {
                                                 milestoneSummary = currentText;
                                                 break;
                                         }
