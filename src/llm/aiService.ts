@@ -166,8 +166,14 @@ export class ConstructAIService implements IConstructAIService, Disposable {
                         signal: streamController.signal,
                 };
 
+                // If the active model doesn't support tool use, strip tools from the request.
+                // This prevents 404 errors from OpenRouter when using free models like
+                // nemotron-3.5-content-safety:free that lack tool support.
+                const activeModel = this._activeProvider.getActiveModel();
+                const effectiveTools = (activeModel && !activeModel.supportsTools) ? [] : tools;
+
                 try {
-                        yield* this._activeProvider.chat(messages, tools, mergedOptions);
+                        yield* this._activeProvider.chat(messages, effectiveTools, mergedOptions);
                 } finally {
                         this._activeStreamController = null;
                 }

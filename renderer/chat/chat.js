@@ -340,6 +340,23 @@ async function sendTask() {
   const text = inputBox.value.trim();
   if (!text) return;
 
+  // O-002 fix: Detect if the user is about to send an API key as a chat message.
+  // API keys should never be sent to the LLM — they go in the settings dialog.
+  const apiKeyPatterns = [
+    /^sk-ant-[a-zA-Z0-9]{20,}/,        // Anthropic
+    /^sk-or-v1-[a-zA-Z0-9]{20,}/,      // OpenRouter
+    /^nvapi-[a-zA-Z0-9]{20,}/,          // NVIDIA NIM
+    /^ghp_[a-zA-Z0-9]{30,}/,            // GitHub PAT (classic)
+    /^github_pat_[a-zA-Z0-9]{20,}/,     // GitHub PAT (fine-grained)
+  ];
+  const looksLikeKey = apiKeyPatterns.some(p => p.test(text));
+  if (looksLikeKey) {
+    addMessage('system', `⚠️ That looks like an API key! Don't send keys as chat messages — they would be sent to the AI provider. To set your API key, click the ⚙️ Settings button and paste it in the correct field.`);
+    inputBox.value = '';
+    inputBox.style.height = 'auto';
+    return;
+  }
+
   addMessage('user', text);
   inputBox.value = '';
   inputBox.style.height = 'auto';
@@ -493,6 +510,10 @@ async function loadModels() {
       const opt = document.createElement('option');
       opt.value = m.id;
       opt.textContent = m.displayName || m.id;
+      // Mark models that don't support tool use
+      if (!m.supportsTools) {
+        opt.textContent += ' (no tools)';
+      }
       if (m.id === currentModel) opt.selected = true;
       modelSelect.appendChild(opt);
     }
@@ -507,6 +528,12 @@ modelSelect.addEventListener('change', async () => {
   const ok = await api.setModel(modelId);
   if (ok) {
     addMessage('system', `Switched to model: ${modelId}`);
+    // Warn if the selected model doesn't support tool use
+    const models = await api.listModels();
+    const selected = models?.find(m => m.id === modelId);
+    if (selected && !selected.supportsTools) {
+      addMessage('system', `⚠️ This model does not support tool use. File creation, editing, and other tool-dependent tasks will not work. Switch to a model that supports tools for full functionality.`);
+    }
   } else {
     addMessage('system', `Failed to switch model to ${modelId}`);
   }
