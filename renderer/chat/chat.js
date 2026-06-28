@@ -42,6 +42,9 @@ const apiKeyModal = document.getElementById('api-key-modal');
 const apiKeyInput = document.getElementById('api-key-input');
 const btnSaveKey = document.getElementById('btn-save-key');
 const btnCancelKey = document.getElementById('btn-cancel-key');
+const creditBadge = document.getElementById('credit-badge');
+const settingsBudget = document.getElementById('settings-budget');
+const btnSaveBudget = document.getElementById('btn-save-budget');
 
 // ---------------------------------------------------------------------------
 // State
@@ -128,11 +131,24 @@ function addPlanCard(plan) {
   const div = document.createElement('div');
   div.className = 'plan-card';
 
-  const stepsHtml = plan.steps.map(s => `<li>[${s.action}] ${escapeHtml(s.target)} — ${escapeHtml(s.description)}</li>`).join('');
+  // Show parsed steps if available
+  const stepsHtml = plan.steps && plan.steps.length > 0
+    ? plan.steps.map(s => `<li>[${s.action}] ${escapeHtml(s.target)}${s.description !== s.target ? ' — ' + escapeHtml(s.description) : ''}</li>`).join('')
+    : '';
+
+  // Always show the raw plan text so the user can see the full proposal
+  // even if parsing didn't extract structured steps.
+  const rawSummary = plan.rawResponse || plan.summary || '';
+  const summaryHtml = rawSummary
+    ? `<div class="plan-summary">${renderMarkdown(rawSummary)}</div>`
+    : '';
+
+  const stepCount = plan.steps ? plan.steps.length : 0;
 
   div.innerHTML = `
-    <h3>Plan: ${plan.steps.length} steps</h3>
-    <ol class="plan-steps">${stepsHtml}</ol>
+    <h3>Plan: ${stepCount} step${stepCount !== 1 ? 's' : ''}</h3>
+    ${stepsHtml ? `<ol class="plan-steps">${stepsHtml}</ol>` : ''}
+    ${summaryHtml}
     <div class="plan-actions">
       <select id="autonomy-select">
         <option value="every_milestone">Every milestone</option>
@@ -246,6 +262,32 @@ function showPendingBar(count) {
   }
 }
 
+async function refreshCreditBadge() {
+  try {
+    const status = await api.getCreditsStatus();
+    if (!creditBadge) return;
+    const used = status.creditsUsed || 0;
+    const remaining = status.creditsRemaining;
+    const max = status.budget?.maxCreditsPerTask || 0;
+
+    if (max > 0) {
+      creditBadge.textContent = `${used}/${max} credits`;
+    } else {
+      creditBadge.textContent = `${used} credits`;
+    }
+
+    // Visual warning states
+    creditBadge.classList.remove('warning', 'emergency');
+    if (status.emergencyMode) {
+      creditBadge.classList.add('emergency');
+    } else if (max > 0 && remaining / max < 0.2) {
+      creditBadge.classList.add('warning');
+    }
+  } catch {
+    // Credit system not available — silently ignore
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Agent event handling
 // ---------------------------------------------------------------------------
@@ -321,11 +363,13 @@ api.onAgentEvent((event) => {
       streamingMessage = null;
       addMessage('system', `✅ Task complete: ${event.summary}`);
       setState('idle');
+      refreshCreditBadge();
       break;
     case 'error':
       streamingMessage = null;
       addMessage('system', `❌ Error: ${event.text}`);
       setState('idle');
+      refreshCreditBadge();
       break;
   }
 });
@@ -390,11 +434,18 @@ async function sendTask() {
 async function approvePlan(plan) {
   if (!plan) return;
   const autonomy = document.getElementById('autonomy-select')?.value || 'major_milestone';
-  const milestones = []; // milestones come from the plan if available
+
+  // Extract milestones from the plan steps if not already provided.
+  // This mirrors the extraction logic in agentLoop.ts so the main process
+  // doesn't have to re-derive milestones from a potentially mangled plan.
+  let milestones = plan.milestones || [];
+  if (!milestones || milestones.length === 0) {
+    milestones = extractMilestonesFromSteps(plan.steps || []);
+  }
 
   const approvedPlan = {
-    task: plan.summary || 'User task',
-    steps: plan.steps.map((s, i) => ({ ...s, selected: true, index: i })),
+    task: plan.summary || plan.rawResponse?.substring(0, 200) || 'User task',
+    steps: (plan.steps || []).map((s, i) => ({ ...s, selected: true, index: i })),
     executionMode: autonomy,
     milestones: milestones,
     approved: true,
@@ -405,7 +456,8 @@ async function approvePlan(plan) {
   const planCard = document.querySelector('.plan-card');
   if (planCard) planCard.remove();
 
-  addMessage('system', `▶ Plan approved (${autonomy}). Starting execution…`);
+  const milestoneInfo = milestones.length > 0 ? ` (${milestones.length} milestone${milestones.length !== 1 ? 's' : ''})` : '';
+  addMessage('system', `▶ Plan approved (${autonomy})${milestoneInfo}. Starting execution…`);
   setState('executing');
   streamingMessage = null;
 
@@ -416,6 +468,71 @@ async function approvePlan(plan) {
   } else {
     setState('idle');
   }
+}
+
+/**
+ * Client-side milestone extraction from plan steps.
+ * Mirrors the logic in agentLoop.extractMilestonesFromPlan() so that
+ * the renderer can show milestone info and the main process receives
+ * a properly structured approved plan.
+ */
+function extractMilestonesFromSteps(steps) {
+  if (!steps || steps.length === 0) return [];
+
+  const milestones = [];
+  let currentGroup = [];
+  let milestoneIndex = 0;
+
+  for (let i = 0; i < steps.length; i++) {
+    currentGroup.push(i);
+
+    const isNaturalBoundary =
+      currentGroup.length >= 3 &&
+      (i === steps.length - 1 ||
+        (steps[i].action === 'Run' && steps[i + 1]?.action !== 'Run') ||
+        (steps[i].action === 'Create' && steps[i + 1]?.action !== 'Create') ||
+        currentGroup.length >= 5);
+
+    if (isNaturalBoundary) {
+      const firstStep = steps[currentGroup[0]];
+      const lastStep = steps[currentGroup[currentGroup.length - 1]];
+      const isMajor = currentGroup.some(idx =>
+        steps[idx].action === 'Create' || steps[idx].action === 'Run'
+      );
+
+      milestones.push({
+        id: `milestone-${milestoneIndex}`,
+        name: `${firstStep.action}: ${firstStep.target}${currentGroup.length > 1 ? ' -> ' + lastStep.target : ''}`,
+        description: `Steps ${currentGroup[0] + 1}-${currentGroup[currentGroup.length - 1] + 1}`,
+        index: milestoneIndex,
+        isMajor: isMajor,
+        stepIndices: [...currentGroup],
+        completed: false,
+      });
+
+      currentGroup = [];
+      milestoneIndex++;
+    }
+  }
+
+  if (currentGroup.length > 0) {
+    const firstStep = steps[currentGroup[0]];
+    const isMajor = currentGroup.some(idx =>
+      steps[idx].action === 'Create' || steps[idx].action === 'Run'
+    );
+
+    milestones.push({
+      id: `milestone-${milestoneIndex}`,
+      name: `${firstStep.action}: ${firstStep.target}`,
+      description: `Steps ${currentGroup[0] + 1}-${currentGroup[currentGroup.length - 1] + 1}`,
+      index: milestoneIndex,
+      isMajor: isMajor,
+      stepIndices: [...currentGroup],
+      completed: false,
+    });
+  }
+
+  return milestones;
 }
 
 function cancelPlan() {
@@ -468,17 +585,36 @@ btnFolder.addEventListener('click', async () => {
 });
 
 btnAcceptAll.addEventListener('click', async () => {
-  await api.acceptAllChanges();
-  // Explicitly refresh pending bar after accept
-  const snapshot = await api.getPendingSnapshot();
-  showPendingBar(Array.isArray(snapshot) ? snapshot.length : 0);
+  try {
+    await api.acceptAllChanges();
+  } catch (e) {
+    console.error('Accept all failed:', e);
+  }
+  // Force refresh pending bar after accept with a microtask delay
+  // to ensure the backend has fully processed the deletion.
+  await new Promise(r => setTimeout(r, 50));
+  try {
+    const snapshot = await api.getPendingSnapshot();
+    showPendingBar(Array.isArray(snapshot) ? snapshot.length : 0);
+  } catch (e) {
+    showPendingBar(0);
+  }
 });
 
 btnRejectAll.addEventListener('click', async () => {
-  await api.rejectAllChanges();
-  // Explicitly refresh pending bar after reject
-  const snapshot = await api.getPendingSnapshot();
-  showPendingBar(Array.isArray(snapshot) ? snapshot.length : 0);
+  try {
+    await api.rejectAllChanges();
+  } catch (e) {
+    console.error('Reject all failed:', e);
+  }
+  // Force refresh pending bar after reject with a microtask delay
+  await new Promise(r => setTimeout(r, 50));
+  try {
+    const snapshot = await api.getPendingSnapshot();
+    showPendingBar(Array.isArray(snapshot) ? snapshot.length : 0);
+  } catch (e) {
+    showPendingBar(0);
+  }
 });
 
 // API key modal
@@ -642,6 +778,28 @@ if (btnSaveOpenRouterKey) {
   });
 }
 
+// Budget settings handler
+if (btnSaveBudget) {
+  btnSaveBudget.addEventListener('click', async () => {
+    const budgetVal = parseInt(settingsBudget.value, 10);
+    if (isNaN(budgetVal) || budgetVal < 0) {
+      addMessage('system', '⚠️ Budget must be a non-negative number. Set to 0 for unlimited.');
+      return;
+    }
+    await api.setCreditsBudget({
+      maxCreditsPerTask: budgetVal,
+      warningThresholdPercent: 20,
+      emergencyStopThreshold: 10,
+      enabled: budgetVal > 0,
+    });
+    addMessage('system', budgetVal === 0
+      ? '🔓 Credit budget set to unlimited.'
+      : `🔒 Credit budget set to ${budgetVal} per task.`
+    );
+    refreshCreditBadge();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Init: check for API key on startup
 // ---------------------------------------------------------------------------
@@ -668,6 +826,9 @@ if (btnSaveOpenRouterKey) {
   // Load models into the selector
   await loadModels();
 
+  // Load credit status
+  await refreshCreditBadge();
+
   // Set initial placeholder based on default mode
   updatePlaceholder();
 
@@ -678,4 +839,12 @@ if (btnSaveOpenRouterKey) {
       welcomeMsg.querySelector('p').textContent = `Workspace: ${appState.workspaceRoots.join(', ')}. Ask anything to get started.`;
     }
   }
+
+  // Pre-fill budget in settings
+  try {
+    const status = await api.getCreditsStatus();
+    if (settingsBudget && status.budget) {
+      settingsBudget.value = status.budget.maxCreditsPerTask || 0;
+    }
+  } catch { /* ignore */ }
 })();

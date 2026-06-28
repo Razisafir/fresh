@@ -27,6 +27,8 @@ import { initToolRegistry } from '../src/tools/toolRegistryService';
 import { initAgentLoop, getAgentLoop } from '../src/agent/agentLoop';
 import { McpManager } from '../src/mcp/mcpManager';
 import { resolveCommandConfirmation } from '../src/platform/prompts';
+import { CreditSystemService, CostGovernorService } from '../src/pricing/creditSystem';
+import type { ICreditBudget } from '../src/pricing/pricingTypes';
 import { logger } from '../src/util/logger';
 import type { IApprovedPlan, AgentLoopEvent } from '../src/types/agent';
 
@@ -37,6 +39,8 @@ import type { IApprovedPlan, AgentLoopEvent } from '../src/types/agent';
 let mainWindow: BrowserWindow | null = null;
 let aiService: ConstructAIService | undefined;
 let mcpManager: McpManager | undefined;
+let creditSystem: CreditSystemService | undefined;
+let costGovernor: CostGovernorService | undefined;
 let _activeAbortController: AbortController | null = null;
 
 // ---------------------------------------------------------------------------
@@ -87,6 +91,13 @@ app.whenReady().then(async () => {
                 workspaceRoots,
         });
         logger.info('[Main] AgentLoop service created.');
+
+        // 5c. Cost Governor — initializes with default budget (unlimited).
+        // Users can set a budget via the Settings UI. The governor blocks
+        // LLM calls when credits run out, preventing runaway API spend.
+        creditSystem = new CreditSystemService();
+        costGovernor = new CostGovernorService(creditSystem);
+        logger.info('[Main] Cost Governor initialized (budget: default unlimited).');
 
         // 5b. Subscribe to pendingChangesService events so the renderer
         //     gets notified when the agent stages files (not just when the
@@ -239,7 +250,16 @@ function registerIpcHandlers(): void {
                 try {
                         const plan = await agentLoop.runPlanningPhase(text, _activeAbortController.signal);
                         // Forward plan to renderer for approval.
-                        sendToRenderer('agent:event', { type: 'plan_ready', plan });
+                        // Include rawResponse so the plan card can display the
+                        // full LLM output even if structured step parsing fails.
+                        sendToRenderer('agent:event', {
+                                type: 'plan_ready',
+                                plan: {
+                                        steps: plan.steps,
+                                        summary: plan.summary,
+                                        rawResponse: plan.rawResponse,
+                                },
+                        });
                         return { success: true, stepCount: plan.steps.length };
                 } catch (error) {
                         const msg = error instanceof Error ? error.message : String(error);
@@ -294,6 +314,14 @@ function registerIpcHandlers(): void {
                                         })),
                                 );
                                 (plan as { milestones: unknown }).milestones = milestones;
+                                logger.info(`[Main] Extracted ${milestones.length} milestones from plan steps (renderer sent none)`);
+                        } else {
+                                logger.info(`[Main] Using ${plan.milestones.length} milestones from renderer`);
+                        }
+
+                        // Log milestone details for debugging
+                        for (const m of (plan.milestones as Array<{ name: string; isMajor: boolean; stepIndices: number[] }>)) {
+                                logger.info(`[Main] Milestone: ${m.name} (major=${m.isMajor}, steps=${m.stepIndices?.join(',')})`);
                         }
 
                         const stream = agentLoop.runWithApprovedPlan(plan, _activeAbortController.signal);
@@ -418,6 +446,36 @@ function registerIpcHandlers(): void {
         // ---- Command confirmation ----
         ipcMain.handle('prompt:confirmResponse', async (_event, command: string, approved: boolean) => {
                 resolveCommandConfirmation(command, approved);
+        });
+
+        // ---- Cost Governor ----
+        ipcMain.handle('credits:getStatus', async () => {
+                if (!creditSystem || !costGovernor) {
+                        return { creditsUsed: 0, creditsRemaining: Infinity, emergencyMode: false, budget: { maxCreditsPerTask: 0, enabled: true } };
+                }
+                return {
+                        creditsUsed: creditSystem.getCreditsUsed(),
+                        creditsRemaining: creditSystem.getCreditsRemaining(),
+                        emergencyMode: costGovernor.isEmergencyMode(),
+                        budget: creditSystem.getBudget(),
+                };
+        });
+
+        ipcMain.handle('credits:setBudget', async (_event, budget: ICreditBudget) => {
+                if (!creditSystem) return;
+                creditSystem.setBudget(budget);
+                logger.info(`[Main] Budget updated: maxCreditsPerTask=${budget.maxCreditsPerTask}, enabled=${budget.enabled}`);
+        });
+
+        ipcMain.handle('credits:resetSession', async () => {
+                if (!creditSystem) return;
+                creditSystem.resetSession();
+                logger.info('[Main] Credit session reset.');
+        });
+
+        ipcMain.handle('credits:getUsageHistory', async (_event, limit?: number) => {
+                if (!creditSystem) return [];
+                return creditSystem.getUsageHistory(limit);
         });
 }
 

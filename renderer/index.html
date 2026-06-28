@@ -14,6 +14,7 @@
       <div class="header-left">
         <span class="logo">◆</span>
         <span class="title">Kovix</span>
+        <span id="credit-badge" class="credit-badge" title="Credits used this session">0 credits</span>
       </div>
       <div class="header-right">
         <select id="provider-select" title="Select AI provider">
@@ -96,6 +97,13 @@
         <p style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">Access Claude, GPT-4o, Gemini, Llama &amp; more via <a href="https://openrouter.ai/keys" style="color:var(--accent)">openrouter.ai</a></p>
         <input id="settings-openrouter-key" type="password" placeholder="sk-or-…">
         <button id="btn-save-openrouter-key" class="btn-small btn-primary">Save</button>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:var(--space-lg) 0;">
+      <div class="settings-group">
+        <label>Credit Budget (per task)</label>
+        <p style="font-size:11px;color:var(--text-secondary);margin-bottom:4px;">Set to 0 for unlimited. Each LLM call costs 1 credit.</p>
+        <input id="settings-budget" type="number" min="0" placeholder="0 (unlimited)">
+        <button id="btn-save-budget" class="btn-small btn-primary">Set Budget</button>
       </div>
       <div class="modal-actions">
         <button id="btn-close-settings" class="btn-secondary">Close</button>

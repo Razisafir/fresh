@@ -1060,10 +1060,15 @@ export class AgentLoopService implements IAgentLoop {
          * Parse a plan from the LLM's text response.
          *
          * Matches lines like "1. [Read] src/App.tsx" or "[Create] new-file.tsx".
-         * If no structured steps are found, creates a single generic step
-         * containing the first 200 chars of the response.
+         * Also matches more natural formats like:
+         *   - "1. Read src/App.tsx" or "1. Read: src/App.tsx"
+         *   - "Step 1: Read the workspace"
+         *   - "- Read the current file"
+         *   - "**Create** a new file"
          *
-         * Preserved verbatim from old repo.
+         * If no structured steps are found, creates a smart fallback based
+         * on the task description (detecting whether the task involves
+         * creating, editing, or just reading).
          */
         private parsePlan(response: string): IPlanStep[] {
                 const steps: IPlanStep[] = [];
@@ -1071,7 +1076,14 @@ export class AgentLoopService implements IAgentLoop {
 
                 let stepIndex = 0;
                 for (const line of lines) {
-                        const match = line.match(/^\s*\d+\.?\s*\[(Read|Create|Edit|Run)\]\s*(.+)/i);
+                        // Pattern 1: Original "[Action]" format (e.g., "1. [Create] file.txt")
+                        const bracketMatch = line.match(/^\s*\d+\.?\s*\[(Read|Create|Edit|Run)\]\s*(.+)/i);
+                        // Pattern 2: Natural "Action:" format (e.g., "1. Read: workspace" or "2. Create a file called hello.txt")
+                        const naturalMatch = line.match(/^\s*\d+\.?\s*\*?\*?(Read|Create|Edit|Run)\*?\*?\s*[:\-–]\s*(.+)/i);
+                        // Pattern 3: "Step N: Action" format (e.g., "Step 1: Read the workspace")
+                        const stepMatch = line.match(/^\s*(?:Step\s+)?\d+\.?\s*[:\-–]\s*(Read|Create|Edit|Run)\s+(.+)/i);
+
+                        const match = bracketMatch || naturalMatch || stepMatch;
                         if (match) {
                                 const action = (match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase()) as IPlanStep['action'];
                                 const target = match[2].trim();
@@ -1085,10 +1097,30 @@ export class AgentLoopService implements IAgentLoop {
                 }
 
                 if (steps.length === 0) {
+                        // Smart fallback: analyze the response to detect the primary action type.
+                        // This ensures milestones are properly categorized (e.g., Create steps
+                        // are "major" and trigger pauses in major_milestone mode).
+                        const lower = response.toLowerCase();
+                        let action: IPlanStep['action'] = 'Read';
+                        let target = 'workspace';
+
+                        if (/\b(create|write|add|new file|generate)\b/i.test(lower)) {
+                                action = 'Create';
+                                // Try to extract a filename from the response
+                                const fileMatch = lower.match(/(?:called|named|write\s+to|create)\s+[`"']?([\w.\-]+\.?\w*)[`"']?/i);
+                                target = fileMatch ? fileMatch[1] : 'new files';
+                        } else if (/\b(edit|modify|update|change|fix|patch)\b/i.test(lower)) {
+                                action = 'Edit';
+                                target = 'existing files';
+                        } else if (/\b(run|execute|install|build|test)\b/i.test(lower)) {
+                                action = 'Run';
+                                target = 'commands';
+                        }
+
                         steps.push({
                                 index: 0,
-                                action: 'Read',
-                                target: 'workspace',
+                                action,
+                                target,
                                 description: response.substring(0, 200),
                         });
                 }

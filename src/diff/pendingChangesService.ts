@@ -71,6 +71,11 @@ export class PendingChangesService implements IPendingChangesService, Disposable
         }
 
         get pendingEntries(): ReadonlyArray<PendingChangeEntry> {
+                // After accept(), entries are deleted from the map entirely.
+                // After reject(), entries are also deleted.
+                // So all remaining entries are truly pending. We keep the
+                // accepted filter as a safety net in case legacy entries
+                // with accepted=true exist from a prior version.
                 return Array.from(this._entries.values()).filter(e => e.accepted === undefined);
         }
 
@@ -165,8 +170,11 @@ export class PendingChangesService implements IPendingChangesService, Disposable
 
                         await platformFs.writeFile(uri.fsPath, entry.proposedContent);
 
-                        // Mark accepted.
-                        this._entries.set(key, { ...entry, accepted: true });
+                        // Remove from the map entirely — the change is no longer
+                        // pending, it's on disk. This ensures pendingEntries always
+                        // reflects only truly unresolved entries, and the UI counter
+                        // correctly drops to 0 after acceptance.
+                        this._entries.delete(key);
                         logger.info(`[PendingChanges] Accepted and written to disk: ${uri.fsPath}`);
                 } catch (error) {
                         const msg = error instanceof Error ? error.message : String(error);

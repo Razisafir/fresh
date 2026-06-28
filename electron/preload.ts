@@ -47,6 +47,12 @@ const api = {
         respondToConfirmation: (command: string, approved: boolean) =>
                 ipcRenderer.invoke('prompt:confirmResponse', command, approved),
 
+        // ---- Cost Governor ----
+        getCreditsStatus: () => ipcRenderer.invoke('credits:getStatus'),
+        setCreditsBudget: (budget: Record<string, unknown>) => ipcRenderer.invoke('credits:setBudget', budget),
+        resetCreditsSession: () => ipcRenderer.invoke('credits:resetSession'),
+        getCreditsUsageHistory: (limit?: number) => ipcRenderer.invoke('credits:getUsageHistory', limit),
+
         // ---- Event listeners (main → renderer) ----
         onAgentEvent: (callback: (event: unknown) => void) => {
                 const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
