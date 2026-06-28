@@ -277,6 +277,12 @@ api.onAgentEvent((event) => {
       break;
     case 'file_written':
       addMessage('system', `📝 File staged: ${event.filePath} (review in Pending Changes)`);
+      // Explicitly refresh the pending bar since the file was just staged
+      api.getPendingSnapshot().then(snapshot => {
+        if (Array.isArray(snapshot)) {
+          showPendingBar(snapshot.length);
+        }
+      });
       break;
     case 'plan_ready': {
       // Guard against duplicate plan_ready events (the IPC handler sends
@@ -463,10 +469,16 @@ btnFolder.addEventListener('click', async () => {
 
 btnAcceptAll.addEventListener('click', async () => {
   await api.acceptAllChanges();
+  // Explicitly refresh pending bar after accept
+  const snapshot = await api.getPendingSnapshot();
+  showPendingBar(Array.isArray(snapshot) ? snapshot.length : 0);
 });
 
 btnRejectAll.addEventListener('click', async () => {
   await api.rejectAllChanges();
+  // Explicitly refresh pending bar after reject
+  const snapshot = await api.getPendingSnapshot();
+  showPendingBar(Array.isArray(snapshot) ? snapshot.length : 0);
 });
 
 // API key modal

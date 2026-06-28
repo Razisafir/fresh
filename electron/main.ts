@@ -88,6 +88,14 @@ app.whenReady().then(async () => {
         });
         logger.info('[Main] AgentLoop service created.');
 
+        // 5b. Subscribe to pendingChangesService events so the renderer
+        //     gets notified when the agent stages files (not just when the
+        //     user clicks accept/reject). Without this, the pending changes
+        //     bar stays at 0 during agent execution.
+        pendingChangesService.onDidChangePendingChanges(() => {
+                notifyPendingChanged();
+        });
+
         // 6. MCP manager.
         mcpManager = new McpManager(registry);
         void mcpManager.start().then(() => {
@@ -274,6 +282,20 @@ function registerIpcHandlers(): void {
 
                 try {
                         const plan = planData as IApprovedPlan;
+
+                        // If milestones are empty (renderer doesn't extract them), extract from steps.
+                        if (!plan.milestones || plan.milestones.length === 0) {
+                                const milestones = agentLoop.extractMilestonesFromPlan(
+                                        plan.steps.map(s => ({
+                                                index: s.index,
+                                                action: s.action,
+                                                target: s.target,
+                                                description: s.description,
+                                        })),
+                                );
+                                (plan as { milestones: unknown }).milestones = milestones;
+                        }
+
                         const stream = agentLoop.runWithApprovedPlan(plan, _activeAbortController.signal);
 
                         // Forward events to renderer as they arrive.
