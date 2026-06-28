@@ -45,12 +45,27 @@ const DEFAULT_EF_SEARCH = 50;
 // to a pure-JS linear-scan implementation.
 // ---------------------------------------------------------------------------
 
-let hnswlib: typeof import('hnswlib-node') | null = null;
+// Minimal interface for the hnswlib-node methods we use. Defined locally
+// so TypeScript doesn't need the hnswlib-node type declarations (which
+// won't exist if the native addon failed to compile).
+interface IHnswIndex {
+        initIndex(maxElements: number, M: number, efConstruction: number): void;
+        getCurrentCount(): number;
+        resizeIndex(newSize: number): void;
+        addPoint(vector: number[], label: number, replace?: boolean): void;
+        setEf(ef: number): void;
+        searchKnn(queryVector: number[], k: number): { neighbors: number[]; distances: number[] };
+        readIndexSync(path: string): void;
+        writeIndexSync(path: string): void;
+}
+
+// Dynamically loaded optional native addon — type is narrowed, not `any`
+let hnswlibModule: { HierarchicalNSW: new (spaceType: string, dim: number) => IHnswIndex } | null = null;
 let hnswlibAvailable = false;
 
 try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports -- conditional import: hnswlib-node is optional and may not be installed
-        hnswlib = require('hnswlib-node');
+        hnswlibModule = require('hnswlib-node') as typeof hnswlibModule;
         hnswlibAvailable = true;
 } catch {
         // hnswlib-node not available — fall back to naive implementation.
@@ -170,7 +185,7 @@ class NaiveVectorStore {
 
 class HnswVectorStore {
         private readonly dimension: number;
-        private readonly index: InstanceType<typeof import('hnswlib-node').HierarchicalNSW>;
+        private readonly index: IHnswIndex;
         private readonly entries: Map<number, IMemoryEntry> = new Map();
         private nextLabel = 0;
         private readonly indexDir: string;
@@ -179,7 +194,7 @@ class HnswVectorStore {
 
         constructor(dimension: number, opts?: { storageDir?: string }) {
                 this.dimension = dimension;
-                const HierarchicalNSW = hnswlib!.HierarchicalNSW;
+                const HierarchicalNSW = hnswlibModule!.HierarchicalNSW;
                 this.index = new HierarchicalNSW('cosine', dimension);
                 this.index.initIndex(DEFAULT_MAX_ELEMENTS, DEFAULT_M, DEFAULT_EF_CONSTRUCTION);
 
