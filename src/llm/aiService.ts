@@ -24,6 +24,7 @@ import {
 } from '../types/llm';
 import { AnthropicProvider } from './providers/anthropicProvider';
 import { NvidiaProvider } from './providers/nvidiaProvider';
+import { OpenRouterProvider } from './providers/openrouterProvider';
 import { getAppState } from '../platform/appState';
 
 // ---------------------------------------------------------------------------
@@ -106,6 +107,19 @@ export class ConstructAIService implements IConstructAIService, Disposable {
                 });
                 nvidia.onDidChangeStatus(s => {
                         logger.verbose(`[ConstructAIService] nvidia-nim status → ${s}`);
+                });
+
+                // Register OpenRouter provider.
+                const openrouter = new OpenRouterProvider(secrets);
+                this._providers.set('openrouter', openrouter);
+
+                openrouter.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === openrouter) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                openrouter.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] openrouter status → ${s}`);
                 });
 
                 // Pick the active provider from config (default: anthropic).
