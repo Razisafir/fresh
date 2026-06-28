@@ -38,21 +38,21 @@
  * Options for building the agent system prompt.
  */
 export interface IBuildPromptOptions {
-	/** The user's task description (used for context, not injected verbatim). */
-	task: string;
-	/**
-	 * Whether this is a planning-only prompt (restricts the agent to
-	 * read-only tools) or a full execution prompt.
-	 */
-	planningOnly: boolean;
-	/** Absolute path of the workspace root, for the "Working directory" line. */
-	workspacePath: string;
-	/**
-	 * Optional extra context to append (e.g. sanitised memory entries,
-	 * sanitised skill playbooks). The caller is responsible for
-	 * sanitising this content before passing it in (SEC-7 H3 fix).
-	 */
-	extraContext?: string;
+        /** The user's task description (used for context, not injected verbatim). */
+        task: string;
+        /**
+         * Whether this is a planning-only prompt (restricts the agent to
+         * read-only tools) or a full execution prompt.
+         */
+        planningOnly: boolean;
+        /** Absolute path of the workspace root, for the "Working directory" line. */
+        workspacePath: string;
+        /**
+         * Optional extra context to append (e.g. sanitised memory entries,
+         * sanitised skill playbooks). The caller is responsible for
+         * sanitising this content before passing it in (SEC-7 H3 fix).
+         */
+        extraContext?: string;
 }
 
 /**
@@ -73,14 +73,14 @@ export interface IBuildPromptOptions {
  * @returns The assembled system prompt string.
  */
 export function buildSystemPrompt(options: IBuildPromptOptions): string {
-	const { task, planningOnly, workspacePath, extraContext } = options;
-	const date = new Date().toISOString().split('T')[0];
+        const { task, planningOnly, workspacePath, extraContext } = options;
+        const date = new Date().toISOString().split('T')[0];
 
-	const mode = planningOnly
-		? 'PLANNING MODE -- use only read_file and list_directory to explore the workspace. Do NOT make any changes.'
-		: '';
+        const mode = planningOnly
+                ? 'PLANNING MODE -- use only read_file and list_directory to explore the workspace. Do NOT make any changes.'
+                : '';
 
-	let prompt = `You are Kovix, an expert AI coding assistant.
+        let prompt = `You are Kovix, an expert AI coding assistant.
 
 ${mode}
 
@@ -135,11 +135,51 @@ Ponytail discipline (DEFAULT: full):
 
 Task: ${task}`;
 
-	// Append optional extra context (memory, skills, etc.). The caller
-	// is responsible for sanitising this content per SEC-7 (H3 fix).
-	if (extraContext && extraContext.trim().length > 0) {
-		prompt += `\n\n[Extra Context]\n${extraContext}`;
-	}
+        // Append optional extra context (memory, skills, etc.). The caller
+        // is responsible for sanitising this content per SEC-7 (H3 fix).
+        if (extraContext && extraContext.trim().length > 0) {
+                prompt += `\n\n[Extra Context]\n${extraContext}`;
+        }
 
-	return prompt;
+        return prompt;
+}
+
+/**
+ * Options for building the chat-oriented system prompt.
+ */
+export interface IBuildChatPromptOptions {
+        /** Absolute path of the workspace root, for the "Working directory" line. */
+        workspacePath: string;
+}
+
+/**
+ * Build a lighter, conversational system prompt for Chat mode.
+ *
+ * Unlike buildSystemPrompt() (which is heavy on engineering discipline,
+ * the Iron Law, and planning-oriented constraints), this prompt is designed
+ * for a Cursor-like experience: the AI acts as a helpful coding assistant
+ * that can use tools autonomously without requiring plan/approve gates.
+ *
+ * @param options Prompt build options.
+ * @returns The assembled system prompt string.
+ */
+export function buildChatSystemPrompt(options: IBuildChatPromptOptions): string {
+        const { workspacePath } = options;
+        const date = new Date().toISOString().split('T')[0];
+
+        return `You are Kovix, an expert AI coding assistant. You help users with coding tasks by answering questions, writing code, and using tools when needed.
+
+Working directory: ${workspacePath}
+Current date: ${date}
+
+You have access to tools for reading, writing, and editing files, running commands, and searching code. Use them proactively when the user's request requires file operations or command execution.
+
+Guidelines:
+- Be helpful, concise, and accurate
+- When writing code, write complete, working code — never truncate with "// ... rest of file"
+- Use tools when the task requires file operations — don't just describe what to do, do it
+- After making changes, verify they work by running relevant commands
+- Ask clarifying questions if the task is ambiguous
+- Prefer running commands over asking the user to run them
+- If no test or build command exists for what you changed, say so explicitly`;
 }

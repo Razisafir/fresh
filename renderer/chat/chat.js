@@ -42,6 +42,7 @@ const btnCancelKey = document.getElementById('btn-cancel-key');
 // ---------------------------------------------------------------------------
 
 let state = 'idle'; // idle | planning | awaiting_approval | executing | complete
+let currentMode = 'chat'; // 'chat' | 'plan'
 let _currentPlan = null;
 let streamingMessage = null;
 
@@ -207,6 +208,12 @@ function setState(newState) {
   btnSend.disabled = (state === 'planning' || state === 'executing');
 }
 
+function updatePlaceholder() {
+  if (inputBox) {
+    inputBox.placeholder = currentMode === 'chat' ? 'Ask anything…' : 'Describe a task…';
+  }
+}
+
 function showPendingBar(count) {
   if (count > 0) {
     pendingBar.classList.remove('hidden');
@@ -249,6 +256,12 @@ api.onAgentEvent((event) => {
       addMessage('system', `📝 File staged: ${event.filePath} (review in Pending Changes)`);
       break;
     case 'plan_ready': {
+      // Guard against duplicate plan_ready events (the IPC handler sends
+      // plan_ready once, but defensive coding prevents double-rendering).
+      if (_currentPlan) {
+        const existingCard = document.querySelector('.plan-card');
+        if (existingCard) break;
+      }
       _currentPlan = event.plan;
       addPlanCard(event.plan);
       setState('awaiting_approval');
@@ -278,7 +291,7 @@ api.onAgentEvent((event) => {
     case 'complete':
       streamingMessage = null;
       addMessage('system', `✅ Task complete: ${event.summary}`);
-      setState('complete');
+      setState('idle');
       break;
     case 'error':
       streamingMessage = null;
@@ -307,13 +320,24 @@ async function sendTask() {
   addMessage('user', text);
   inputBox.value = '';
   inputBox.style.height = 'auto';
-  setState('planning');
   streamingMessage = null;
 
-  const result = await api.sendTask(text);
-  if (result.error) {
-    addMessage('system', `❌ ${result.error}`);
-    setState('idle');
+  if (currentMode === 'chat') {
+    // Chat mode: send directly to AI, no plan/approve gate
+    setState('executing');
+    const result = await api.chat(text);
+    if (result.error) {
+      addMessage('system', `❌ ${result.error}`);
+      setState('idle');
+    }
+  } else {
+    // Plan mode: existing behavior
+    setState('planning');
+    const result = await api.sendTask(text);
+    if (result.error) {
+      addMessage('system', `❌ ${result.error}`);
+      setState('idle');
+    }
   }
 }
 
@@ -367,6 +391,21 @@ inputBox.addEventListener('keydown', (e) => {
     e.preventDefault();
     sendTask();
   }
+});
+
+// Mode toggle buttons
+document.getElementById('btn-mode-chat').addEventListener('click', () => {
+  currentMode = 'chat';
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-mode-chat').classList.add('active');
+  updatePlaceholder();
+});
+
+document.getElementById('btn-mode-plan').addEventListener('click', () => {
+  currentMode = 'plan';
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-mode-plan').classList.add('active');
+  updatePlaceholder();
 });
 
 // Auto-grow textarea
@@ -477,6 +516,9 @@ btnSaveAnthropicKey.addEventListener('click', async () => {
 
   // Load models into the selector
   await loadModels();
+
+  // Set initial placeholder based on default mode
+  updatePlaceholder();
 
   // Check workspace roots
   const appState = await api.getAppState();

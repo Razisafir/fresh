@@ -239,6 +239,25 @@ function registerIpcHandlers(): void {
                 }
         });
 
+        ipcMain.handle('agent:chat', async (_event, text: string) => {
+                const agentLoop = getAgentLoop();
+                if (!agentLoop) return { error: 'Agent loop not initialized' };
+                if (agentLoop.isRunning) return { error: 'Agent is already running' };
+
+                _activeAbortController = new AbortController();
+
+                try {
+                        const stream = agentLoop.chat(text, _activeAbortController.signal);
+                        for await (const event of stream) {
+                                sendToRenderer('agent:event', forwardAgentLoopEvent(event));
+                        }
+                        return { success: true };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
         ipcMain.handle('agent:cancel', async () => {
                 if (_activeAbortController) {
                         _activeAbortController.abort();

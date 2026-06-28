@@ -17,6 +17,10 @@
       </div>
       <div class="header-right">
         <select id="model-select" title="Select model"><option value="">Loading models…</option></select>
+        <div class="mode-toggle" id="mode-toggle">
+          <button class="mode-btn active" data-mode="chat" id="btn-mode-chat">Chat</button>
+          <button class="mode-btn" data-mode="plan" id="btn-mode-plan">Plan</button>
+        </div>
         <button id="btn-folder" title="Open folder">📂</button>
         <button id="btn-settings" title="Settings">⚙️</button>
       </div>
@@ -25,7 +29,7 @@
     <!-- Message list -->
     <main id="message-list">
       <div id="welcome-message" class="welcome">
-        <p>Welcome to Kovix. Open a folder to get started.</p>
+        <p>Welcome to Kovix. Chat with AI or switch to Plan mode for structured automation.</p>
       </div>
     </main>
 
@@ -38,7 +42,7 @@
 
     <!-- Input area -->
     <footer id="input-area">
-      <textarea id="input-box" placeholder="Describe a task…" rows="1"></textarea>
+      <textarea id="input-box" placeholder="Ask anything…" rows="1"></textarea>
       <button id="btn-send" title="Send task">➤</button>
     </footer>
   </div>

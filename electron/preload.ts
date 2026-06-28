@@ -14,6 +14,7 @@ const { contextBridge, ipcRenderer } = require('electron') as typeof import('ele
 const api = {
         // ---- Agent operations ----
         sendTask: (text: string) => ipcRenderer.invoke('agent:sendTask', text),
+        chat: (text: string) => ipcRenderer.invoke('agent:chat', text),
         cancel: () => ipcRenderer.invoke('agent:cancel'),
         approvePlan: (plan: unknown) => ipcRenderer.invoke('agent:approvePlan', plan),
         cancelPlan: () => ipcRenderer.invoke('agent:cancelPlan'),

@@ -244,15 +244,23 @@ export class AnthropicProvider implements IConstructAIProvider, Disposable {
                 const anthropicMessages = this.convertToAnthropicMessages(messages);
                 const anthropicTools = tools.length > 0 ? this.convertToAnthropicTools(tools) : undefined;
 
-                return {
+                const body: Record<string, unknown> = {
                         model: this._activeModel?.id ?? DEFAULT_ANTHROPIC_MODEL,
                         max_tokens: options?.maxTokens ?? 8192,
-                        temperature: options?.temperature ?? 0.3,
                         messages: anthropicMessages,
                         tools: anthropicTools,
                         stream: true,
                         system: options?.systemPrompt ?? undefined,
                 };
+
+                // Only include temperature when explicitly provided in options.
+                // Some newer Anthropic models (e.g. claude-sonnet-4-6, claude-opus-4-8)
+                // do not support the temperature parameter and will reject the request.
+                if (options?.temperature !== undefined) {
+                        body.temperature = options.temperature;
+                }
+
+                return body;
         }
 
         private convertToAnthropicMessages(messages: IChatMessage[]): unknown[] {

@@ -161,6 +161,40 @@ html, body {
   border-color: var(--accent);
 }
 
+/* --------------------------------------------------------------------------
+   Mode toggle (Chat / Plan segmented control)
+   -------------------------------------------------------------------------- */
+.mode-toggle {
+  display: flex;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.mode-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.mode-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.mode-btn.active {
+  background: var(--accent);
+  color: white;
+}
+
 /* Settings modal */
 .settings-group {
   margin-bottom: var(--space-md);

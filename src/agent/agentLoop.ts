@@ -108,7 +108,7 @@ import { ITool, IConstructToolRegistry } from '../types/tools';
 import { IPendingChangesService } from '../diff/pendingChanges';
 import { IWorkspaceRootsProvider } from '../security/workspaceGuard';
 import { getMemoryService } from '../memory/memoryService';
-import { buildSystemPrompt } from './promptBuilder';
+import { buildSystemPrompt, buildChatSystemPrompt } from './promptBuilder';
 import { executeMilestonesWithPauses } from './milestoneExecutor';
 import { runVerification, detectVerificationCommand } from './verification';
 
@@ -430,6 +430,182 @@ export class AgentLoopService implements IAgentLoop {
                         const msg = error instanceof Error ? error.message : String(error);
                         logger.error(`[AgentLoop] Planning error: ${msg}`);
                         throw error;
+                }
+        }
+
+        // ----------------------------------------------------------------------
+        // Chat mode (Cursor-like: no plan/approve, direct tool use)
+        // ----------------------------------------------------------------------
+
+        /**
+         * Chat mode: an agentic loop that uses a conversational system prompt
+         * and executes tools autonomously without plan/approve gates.
+         *
+         * Like Cursor — the user types a message, the AI responds with
+         * optional tool use, no approval required. Conversation history
+         * persists across turns.
+         *
+         * Yields AgentLoopEvent for streaming tokens, tool calls, and
+         * results back to the renderer.
+         */
+        async *chat(text: string, signal?: AbortSignal): AsyncGenerator<AgentLoopEvent> {
+                if (this._isRunning) {
+                        yield { type: 'error', text: 'Agent loop is already running.', recoverable: false };
+                        return;
+                }
+
+                this._isRunning = true;
+                this._onDidStart.fire(text);
+                this._executionState = ExecutionState.Executing;
+                logger.info(`[AgentLoop] Chat mode started: ${text}`);
+
+                try {
+                        const workspacePath = this.deps.workspaceRoots.getWorkspaceRoots()[0] ?? '.';
+                        const systemPrompt = buildChatSystemPrompt({ workspacePath });
+
+                        // F-003 multi-turn: prepend prior conversation context.
+                        const conversationMessages: IChatMessage[] = [
+                                ...this._conversationHistory,
+                                { role: 'user', content: text },
+                        ];
+
+                        let roundCount = 0;
+                        let finalSummary = '';
+
+                        while (roundCount < MAX_ROUNDS) {
+                                roundCount++;
+                                logger.info(`[AgentLoop] Chat round ${roundCount}/${MAX_ROUNDS}`);
+
+                                const assistantToolCalls: IToolCall[] = [];
+                                const toolResults: { toolUseId: string; toolName: string; result: string; success: boolean; filePath?: string }[] = [];
+                                let currentText = '';
+                                let stopReason = '';
+                                let hasToolCalls = false;
+
+                                const timeoutController = new AbortController();
+                                const timeoutId = setTimeout(() => timeoutController.abort(), 60_000);
+                                if (signal) {
+                                        signal.addEventListener('abort', () => timeoutController.abort());
+                                }
+
+                                const stream = this.deps.aiService.chat(
+                                        conversationMessages,
+                                        this.getAgentTools(),
+                                        { signal: timeoutController.signal, systemPrompt },
+                                );
+
+                                for await (const event of stream) {
+                                        if (signal?.aborted) {
+                                                clearTimeout(timeoutId);
+                                                yield { type: 'error', text: '[STOP] Stopped by user', recoverable: false };
+                                                this._isRunning = false;
+                                                return;
+                                        }
+
+                                        switch (event.type) {
+                                                case 'token':
+                                                        currentText += event.text;
+                                                        yield { type: 'token', text: event.text };
+                                                        break;
+
+                                                case 'tool_start':
+                                                        hasToolCalls = true;
+                                                        assistantToolCalls.push({
+                                                                id: event.toolId,
+                                                                name: event.toolName,
+                                                                arguments: '{}',
+                                                        });
+                                                        yield { type: 'tool_start', toolId: event.toolId, toolName: event.toolName };
+                                                        break;
+
+                                                case 'tool_input':
+                                                        yield { type: 'tool_executing', toolId: event.toolId, toolName: '', detail: event.text };
+                                                        break;
+
+                                                case 'tool_end': {
+                                                        const toolCall = assistantToolCalls.find(tc => tc.id === event.toolId);
+                                                        if (toolCall) {
+                                                                toolCall.arguments = JSON.stringify(event.toolInput ?? {});
+                                                        }
+
+                                                        yield { type: 'tool_executing', toolId: event.toolId, toolName: event.toolName, detail: 'Executing...' };
+
+                                                        const toolResult = await this.executeTool(event.toolName, event.toolInput, false);
+                                                        const success = !toolResult.startsWith('Error:');
+
+                                                        yield { type: 'tool_result', toolId: event.toolId, toolName: event.toolName, result: toolResult, success };
+
+                                                        // Track file-written events for the UI's pending-changes panel.
+                                                        let filePath: string | undefined;
+                                                        if ((event.toolName === 'write_file' || event.toolName === 'edit_file') && success) {
+                                                                const toolInput = event.toolInput as Record<string, string> | null;
+                                                                filePath = toolInput?.path ?? '';
+                                                                if (filePath) {
+                                                                        yield { type: 'file_written', filePath };
+                                                                }
+                                                        }
+
+                                                        toolResults.push({
+                                                                toolUseId: event.toolId,
+                                                                toolName: event.toolName,
+                                                                result: toolResult,
+                                                                success,
+                                                                filePath,
+                                                        });
+                                                        break;
+                                                }
+
+                                                case 'done':
+                                                        stopReason = event.stopReason;
+                                                        break;
+
+                                                case 'error':
+                                                        yield { type: 'error', text: event.text, recoverable: true };
+                                                        break;
+                                        }
+                                }
+
+                                clearTimeout(timeoutId);
+
+                                if (hasToolCalls && toolResults.length > 0) {
+                                        conversationMessages.push({
+                                                role: 'assistant',
+                                                content: currentText || '(executing tools)',
+                                                toolCalls: assistantToolCalls.length > 0 ? assistantToolCalls : undefined,
+                                        });
+
+                                        for (const tr of toolResults) {
+                                                conversationMessages.push({
+                                                        role: 'tool',
+                                                        content: tr.result,
+                                                        toolCallId: tr.toolUseId,
+                                                });
+                                        }
+                                }
+
+                                if (stopReason === 'end_turn' || !hasToolCalls) {
+                                        finalSummary = currentText;
+                                        break;
+                                }
+                        }
+
+                        // F-003 fix: remember this turn for multi-turn context.
+                        this._conversationHistory.push(
+                                { role: 'user', content: text },
+                                { role: 'assistant', content: finalSummary },
+                        );
+
+                        this._executionState = ExecutionState.Complete;
+                        this._onDidComplete.fire({ summary: finalSummary });
+                        yield { type: 'complete', summary: finalSummary };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        logger.error(`[AgentLoop] Chat mode error: ${msg}`);
+                        this._executionState = ExecutionState.Error;
+                        this._onError.fire({ text: msg, recoverable: true });
+                        yield { type: 'error', text: msg, recoverable: true };
+                } finally {
+                        this._isRunning = false;
                 }
         }
 
