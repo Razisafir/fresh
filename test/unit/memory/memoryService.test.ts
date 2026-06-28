@@ -21,7 +21,7 @@ import * as fs from 'fs';
 import { VectorStore } from '../../../src/memory/vectorStore';
 import { NullEmbeddingService, createEmbeddingService } from '../../../src/memory/embeddingService';
 import { _createForTest } from '../../../src/memory/memoryService';
-import type { IEmbeddingService, EmbeddingResult } from '../../../src/memory/embeddingService';
+import type { IEmbeddingService, EmbeddingResult, EmbeddingStatus, StatusChangeCallback } from '../../../src/memory/embeddingService';
 import type { IMemoryConfig } from '../../../src/memory/types';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +61,14 @@ class MockWordOverlapEmbedder implements IEmbeddingService {
 
         getDimension(): number | null {
                 return MockWordOverlapEmbedder.FIXED_DIM;
+        }
+
+        getStatus(): EmbeddingStatus {
+                return 'available';
+        }
+
+        onStatusChange(_callback: StatusChangeCallback): void {
+                // No-op for test mock
         }
 }
 
