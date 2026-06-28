@@ -13,7 +13,7 @@
   },
   "main": "dist/electron-main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "npm run compile && electron .",
     "compile": "tsc --noEmit && node scripts/build-electron.cjs",
     "watch": "node scripts/build-electron.cjs --watch",
     "typecheck": "tsc --noEmit",
@@ -44,7 +44,8 @@
     "serialize-javascript": "^7.0.6",
     "diff": "^9.0.0"
   },
-  "dependencies": {
+  "dependencies": {},
+  "optionalDependencies": {
     "hnswlib-node": "^3.0.0"
   },
   "build": {
