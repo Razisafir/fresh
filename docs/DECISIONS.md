@@ -6,6 +6,18 @@
 
 ---
 
+## D-014 — Electron Stage 1 Smoke Test PASSED
+**Date:** 2026-06-29
+**Decision:** Hard Stop #1 (Electron Stage 1 smoke test) is **PASSED**. The standalone Electron app was run by the project lead on Windows 10 (build 26200.8737), branch `harvest/full-run`. The user: (1) launched the app via `npm start`, (2) selected a workspace folder (`C:\Users\Lenovo\Desktop\Kovix trial folder`), (3) entered the task "Create a file called test-smoke.txt with the content 'smoke test passed'" in Chat mode, (4) saw a plan proposed, (5) approved it, (6) confirmed the file was written to disk. The full terminal log confirms: `[PendingChanges] Accepted and written to disk: C:\Users\Lenovo\Desktop\Kovix trial folder\test-smoke.txt`.
+**Context:** The harvest plan required a human-run smoke test before any harvest work could be considered verified. This was Hard Stop #1 — could not be inferred or bypassed.
+**Bug discovered during test:** The OpenRouter API key (`sk-or-v1-...`) was accidentally submitted as a chat message. Log line: `[AgentLoop] Chat mode started: sk-or-v1-[REDACTED]`. This is a UI/input-handling bug — the API key field and the chat input field may share focus or the key was pasted into the wrong field. Filed as ISSUE O-002.
+**Alternatives considered:** N/A — this was a pass/fail gate.
+**Tradeoffs:** N/A
+**Action items:**
+1. Investigate the API-key-as-chat-message bug. Likely a focus or event-handling issue in the renderer.
+2. Hard Stop #2 (Aegis license) remains open — needs user answer.
+**Revisit at:** N/A — gate is passed.
+
 ## D-013 — UI design direction: Cursor/Codex polish with Material aesthetic
 **Date:** 2026-06-27
 **Decision:** The Kovix webview UI will be designed to **Cursor / Codex CLI quality** — sleek, modern, dark-first, with a **Google Material aesthetic** (layered surfaces, soft shadows, rounded corners, restrained color use, clear typographic hierarchy). The default theme is dark; light theme support is deferred. No pixel-for-pixel clone of Cursor or Codex — we take the *quality bar* and *overall feel*, not the specific layout.

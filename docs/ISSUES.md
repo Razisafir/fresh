@@ -7,11 +7,11 @@ This document tracks every issue carried over from the old repo (Kovix_2.0) plus
 
 ## Summary
 
-- **Total issues tracked:** 21
-- **RESOLVED in fresh:** 13 (including 6 found and fixed in the Round 2C test-audit pass + O-001 resolved in Round 2D)
-- **DEFERRED to v1.0-beta or later:** 8 (each with rationale + revisit date)
-- **OPEN (blocking v0.1-alpha):** 0 — **v0.1-alpha is feature-complete.**
-- **OPEN (blocking v1.0):** 0
+- **Total issues tracked:** 22
+- **RESOLVED in fresh:** 14 (including 6 found and fixed in the Round 2C test-audit pass + O-001 resolved in Round 2D + D-005 resolved in harvest)
+- **DEFERRED to v1.0-beta or later:** 7 (each with rationale + revisit date; D-005 promoted to RESOLVED)
+- **OPEN (blocking v0.1-alpha):** 0
+- **OPEN (blocking v1.0):** 1 (O-002 — API key submitted as chat message)
 
 ---
 
@@ -136,15 +136,12 @@ This document tracks every issue carried over from the old repo (Kovix_2.0) plus
 
 ### D-005 — Cost governor / credit system / execution sanity
 **Source:** `agentLoop.ts` §"What is dropped"
-**Status:** DEFERRED to v1.0-beta
-**Rationale:** v0.1 has no spending gate (user is presumed to be using their own API key with their own provider-side limits). Cost governance lands when payment integration lands.
-**Revisit:** When payment integration is designed (v1.0-beta).
+**Status:** RESOLVED (harvest Step 4 — `src/pricing/creditSystem.ts` + `src/pricing/pricingTypes.ts` + `BudgetExceededError` + `checkCostGate()` wiring in `agentLoopHelpers.ts`). Stripped-down version ported from Kovix_2.0 (credit accounting + budget enforcement only, no subscription tiers or Stripe). Manual smoke test doc at `docs/13a_COST_GOVERNOR_SMOKE_TEST.md` — PENDING human verification.
 
 ### D-006 — Snapshot manager (undo support)
 **Source:** `agentLoop.ts` §"What is dropped"
-**Status:** DEFERRED to v1.0-beta
-**Rationale:** `undoLastTask()` is a stub returning `null`. Snapshot/restore lands in v1.0-beta.
-**Revisit:** When porting `src/snapshot/` (v1.0-beta).
+**Status:** PARTIALLY RESOLVED (harvest Step 6 — `docs/15_SNAPSHOT_UNDO_SCOPE.md` defines incremental extension plan for `pendingChangesService.ts`: pre-accept checksums, rollback log, source tagging). Implementation deferred to next sprint.
+**Revisit:** When implementing snapshot/undo per `docs/15_SNAPSHOT_UNDO_SCOPE.md`.
 
 ### D-007 — Skill registry
 **Source:** `agentLoop.ts` §"What is dropped"
@@ -160,13 +157,23 @@ This document tracks every issue carried over from the old repo (Kovix_2.0) plus
 
 ---
 
-## OPEN Issues (0)
+## OPEN Issues (1)
 
-**v0.1-alpha is feature-complete.** All v0.1-blocking issues are RESOLVED.
+### O-002 — API key submitted as chat message (SEC-7 — found in Electron Stage 1 smoke test)
+**Source:** D-014 smoke test log — `[AgentLoop] Chat mode started: sk-or-v1-[REDACTED]`
+**Status:** OPEN (blocking v1.0)
+**Description:** During the Electron Stage 1 smoke test, the user's OpenRouter API key was accidentally submitted as a chat prompt. The agent loop processed it as a normal chat message. This is a UX/input-handling bug: either the API key input field and the chat input field share focus, or the key was pasted into the wrong field and the chat input accepted it without validation.
+**Risk:** (1) API key sent to the LLM provider as a prompt — the key is now in the provider's conversation logs. (2) The key appears in the local agent loop logs in plaintext. (3) User confusion — no error or warning that they're sending a secret as a chat message.
+**Fix proposal:** Add input validation to the chat input that detects common API key patterns (`sk-ant-`, `sk-or-v1-`, `nvapi-`, `ghp_`, `github_pat_`) and shows a confirmation dialog: "This looks like an API key. Are you sure you want to send it as a message?" Also redact detected keys in agent loop logs using the existing `redactSecrets()` function.
+**Revisit:** Before v1.0 release.
+
+---
+
+**v0.1-alpha is feature-complete** (minus O-002, which does not block the alpha demo path but must be fixed before v1.0 release).
 
 The previous Round 2C blocker O-001 (agent panel webview) was resolved in Round 2D as R-016. See the RESOLVED section above for evidence.
 
-The 8 DEFERRED issues above remain scheduled for v1.0-beta / v1.0 / v1.0-rc per their individual revisit dates. None block the v0.1-alpha demo path.
+The 7 DEFERRED issues above remain scheduled for v1.0-beta / v1.0 / v1.0-rc per their individual revisit dates. None block the v0.1-alpha demo path.
 
 ---
 
