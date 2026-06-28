@@ -496,7 +496,7 @@ async function loadModels() {
       if (m.id === currentModel) opt.selected = true;
       modelSelect.appendChild(opt);
     }
-  } catch (err) {
+  } catch (_err) {
     modelSelect.innerHTML = '<option value="">Error loading models</option>';
   }
 }
@@ -624,7 +624,7 @@ if (btnSaveOpenRouterKey) {
       activeProvider = provider;
       if (providerSelect) providerSelect.value = provider;
     }
-  } catch {}
+  } catch { /* no saved provider yet */ }
 
   // Load models into the selector
   await loadModels();
