@@ -441,6 +441,10 @@ btnFolder.addEventListener('click', async () => {
   const result = await api.pickFolder();
   if (!result.cancelled) {
     addMessage('system', `📂 Opened: ${result.paths.join(', ')}`);
+    // Notify Layout B file tree
+    if (window.fileTree && result.paths.length > 0) {
+      window.fileTree.setWorkspaceRoot(result.paths[0]);
+    }
   }
 });
 

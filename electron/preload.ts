@@ -32,6 +32,11 @@ const api = {
         acceptAllChanges: () => ipcRenderer.invoke('pending:acceptAll'),
         rejectAllChanges: () => ipcRenderer.invoke('pending:rejectAll'),
         getPendingSnapshot: () => ipcRenderer.invoke('pending:getSnapshot'),
+        getPendingEntryDetail: (filePath: string) => ipcRenderer.invoke('pending:getEntryDetail', filePath),
+
+        // ---- File system (for file tree / editor) ----
+        listDirectory: (dirPath: string) => ipcRenderer.invoke('fs:listDirectory', dirPath),
+        readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
 
         // ---- App operations ----
         pickFolder: () => ipcRenderer.invoke('app:pickFolder'),

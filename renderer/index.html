@@ -3,14 +3,123 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; font-src 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-eval'; font-src 'self'; worker-src 'self' blob:; img-src 'self' data:;">
   <title>Kovix</title>
+  <!-- Stylesheets -->
   <link rel="stylesheet" href="chat/chat.css">
+  <link rel="stylesheet" href="filetree/filetree.css">
+  <link rel="stylesheet" href="editor/editor.css">
+  <style>
+    /* ==========================================================================
+       Layout B — Three-pane layout
+       ========================================================================== */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    #layout-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-sm) var(--space-lg);
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      min-height: 44px;
+      flex-shrink: 0;
+    }
+
+    #layout-body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* File tree pane */
+    #pane-filetree {
+      width: 240px;
+      min-width: 160px;
+      max-width: 400px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Editor pane */
+    #pane-editor {
+      flex: 1;
+      min-width: 300px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Chat pane */
+    #pane-chat {
+      width: 380px;
+      min-width: 280px;
+      max-width: 600px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-left: 1px solid var(--border);
+    }
+
+    /* Resize handles */
+    .resize-handle {
+      width: 4px;
+      cursor: col-resize;
+      background: transparent;
+      flex-shrink: 0;
+      transition: background var(--transition);
+      z-index: 10;
+    }
+
+    .resize-handle:hover,
+    .resize-handle.active {
+      background: var(--accent);
+    }
+
+    /* Mobile/small screen: stack vertically */
+    @media (max-width: 800px) {
+      #layout-body {
+        flex-direction: column;
+      }
+      #pane-filetree {
+        width: 100%;
+        max-width: none;
+        height: 200px;
+        min-height: 100px;
+        max-height: 300px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+      #pane-editor {
+        min-width: 0;
+      }
+      #pane-chat {
+        width: 100%;
+        max-width: none;
+        height: 300px;
+        min-height: 150px;
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+      .resize-handle {
+        width: 100%;
+        height: 4px;
+        cursor: row-resize;
+      }
+    }
+  </style>
 </head>
 <body>
   <div id="app">
     <!-- Header -->
-    <header id="panel-header">
+    <header id="layout-header">
       <div class="header-left">
         <span class="logo">◆</span>
         <span class="title">Kovix</span>
@@ -31,25 +140,57 @@
       </div>
     </header>
 
-    <!-- Message list -->
-    <main id="message-list">
-      <div id="welcome-message" class="welcome">
-        <p>Welcome to Kovix. Chat with AI or switch to Plan mode for structured automation.</p>
+    <!-- Three-pane body -->
+    <div id="layout-body">
+      <!-- Left: File Tree -->
+      <div id="pane-filetree">
+        <div class="file-tree-header">
+          <span>Explorer</span>
+          <button id="btn-refresh-tree" title="Refresh file tree">↻</button>
+        </div>
+        <div id="file-tree-container" class="file-tree-container"></div>
       </div>
-    </main>
 
-    <!-- Pending changes bar -->
-    <div id="pending-bar" class="pending-bar hidden">
-      <span id="pending-count">0 pending changes</span>
-      <button id="btn-accept-all" class="btn-small btn-accept">Accept all</button>
-      <button id="btn-reject-all" class="btn-small btn-reject">Reject all</button>
+      <div class="resize-handle" id="resize-tree-editor"></div>
+
+      <!-- Center: Editor -->
+      <div id="pane-editor">
+        <div class="editor-header" id="editor-header">
+          <span class="editor-file-path" id="editor-file-path"></span>
+        </div>
+        <div class="editor-container" id="editor-container"></div>
+      </div>
+
+      <div class="resize-handle" id="resize-editor-chat"></div>
+
+      <!-- Right: Chat -->
+      <div id="pane-chat">
+        <!-- Chat header (compact, inside the chat pane) -->
+        <div id="chat-internal-header" style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-xs) var(--space-md);background:var(--bg-surface);border-bottom:1px solid var(--border);flex-shrink:0;min-height:32px;">
+          <span style="font-size:var(--font-size-xs);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);">Chat</span>
+        </div>
+
+        <!-- Message list -->
+        <main id="message-list">
+          <div id="welcome-message" class="welcome">
+            <p>Welcome to Kovix. Chat with AI or switch to Plan mode for structured automation.</p>
+          </div>
+        </main>
+
+        <!-- Pending changes bar -->
+        <div id="pending-bar" class="pending-bar hidden">
+          <span id="pending-count">0 pending changes</span>
+          <button id="btn-accept-all" class="btn-small btn-accept">Accept all</button>
+          <button id="btn-reject-all" class="btn-small btn-reject">Reject all</button>
+        </div>
+
+        <!-- Input area -->
+        <footer id="input-area">
+          <textarea id="input-box" placeholder="Ask anything…" rows="1"></textarea>
+          <button id="btn-send" title="Send task">➤</button>
+        </footer>
+      </div>
     </div>
-
-    <!-- Input area -->
-    <footer id="input-area">
-      <textarea id="input-box" placeholder="Ask anything…" rows="1"></textarea>
-      <button id="btn-send" title="Send task">➤</button>
-    </footer>
   </div>
 
   <!-- API key modal (first-run) -->
@@ -103,6 +244,217 @@
     </div>
   </div>
 
+  <!-- Monaco AMD loader (must load before editor.js) -->
+  <script src="monaco/vs/loader.js"></script>
+  <script>
+    // Configure Monaco's AMD loader to find its files from the local copy
+    require.config({
+      paths: {
+        'vs': 'monaco/vs'
+      }
+    });
+  </script>
+
+  <!-- Component scripts -->
+  <script src="filetree/filetree.js"></script>
+  <script src="editor/editor.js"></script>
   <script src="chat/chat.js"></script>
+
+  <!-- Layout coordination script -->
+  <script>
+    /**
+     * Layout B coordinator — wires file tree, editor, and chat together.
+     *
+     * CRITICAL CONSTRAINT RESTATED: The editor NEVER writes directly to disk.
+     * Monaco's onDidChangeModelContent only updates an in-memory model.
+     * The only path to disk is still pendingChangesService.accept(),
+     * accessed via api.acceptChange() / api.acceptAllChanges().
+     */
+
+    const api = window.__kovix_api;
+
+    // ---- Initialize components ----
+
+    let fileTree = null;
+    let kovixEditor = null;
+
+    async function initLayout() {
+      // Initialize file tree
+      const treeContainer = document.getElementById('file-tree-container');
+      fileTree = new KovixFileTree(treeContainer, api, {
+        onFileSelect: (filePath) => handleFileSelect(filePath),
+      });
+      // Expose globally so chat.js can update on folder pick
+      window.fileTree = fileTree;
+
+      // Initialize Monaco editor
+      const editorContainer = document.getElementById('editor-container');
+      const editorHeader = document.getElementById('editor-header');
+      kovixEditor = new KovixEditor(editorContainer, editorHeader, api, {
+        onAccept: (filePath) => handleChangeResolved(filePath),
+        onReject: (filePath) => handleChangeResolved(filePath),
+      });
+
+      try {
+        await kovixEditor.init();
+      } catch (err) {
+        console.error('[Layout] Failed to initialize Monaco editor:', err);
+      }
+
+      // Check workspace roots and populate tree if available
+      const appState = await api.getAppState();
+      if (appState.workspaceRoots && appState.workspaceRoots.length > 0) {
+        await fileTree.setWorkspaceRoot(appState.workspaceRoots[0]);
+        if (welcomeMsg) {
+          welcomeMsg.querySelector('p').textContent =
+            `Workspace: ${appState.workspaceRoots[0]}. Ask anything to get started.`;
+        }
+      }
+
+      // Refresh tree button
+      document.getElementById('btn-refresh-tree').addEventListener('click', () => {
+        if (fileTree.workspaceRoot) {
+          fileTree.refresh();
+        }
+      });
+
+      // Set up resize handles
+      setupResizeHandles();
+
+      // Listen for pending changes to update both tree and editor
+      setupPendingChangesSync();
+    }
+
+    /**
+     * Handle file selection from the tree.
+     */
+    async function handleFileSelect(filePath) {
+      if (kovixEditor) {
+        await kovixEditor.openFile(filePath);
+      }
+    }
+
+    /**
+     * Handle a change being accepted or rejected.
+     */
+    async function handleChangeResolved(filePath) {
+      // Refresh the file tree to remove the pending indicator
+      if (fileTree) {
+        const snapshot = await api.getPendingSnapshot();
+        const paths = (snapshot || []).map(e => e.filePath);
+        fileTree.setPendingPaths(paths);
+      }
+
+      // If the editor is showing this file, refresh it
+      if (kovixEditor && kovixEditor.currentFilePath === filePath) {
+        await kovixEditor.openFile(filePath);
+      }
+    }
+
+    /**
+     * Set up sync between pending changes events and the tree/editor.
+     */
+    function setupPendingChangesSync() {
+      // The chat.js onPendingChanged handler already exists.
+      // We extend it to also update the file tree and editor.
+      // We do this by listening to the same event.
+      api.onPendingChanged((entries) => {
+        if (!Array.isArray(entries)) return;
+
+        // Update file tree pending indicators
+        if (fileTree) {
+          const paths = entries.map(e => e.filePath);
+          fileTree.setPendingPaths(paths);
+        }
+
+        // If the currently open file has a pending change, refresh the editor
+        if (kovixEditor && kovixEditor.currentFilePath) {
+          const currentPending = entries.find(e => e.filePath === kovixEditor.currentFilePath);
+          if (currentPending) {
+            // Show diff for the pending change
+            kovixEditor.openFile(kovixEditor.currentFilePath);
+          }
+        }
+      });
+    }
+
+    /**
+     * Set up drag-to-resize handles between panes.
+     */
+    function setupResizeHandles() {
+      // Tree ↔ Editor handle
+      const handle1 = document.getElementById('resize-tree-editor');
+      const paneTree = document.getElementById('pane-filetree');
+      makeResizable(handle1, paneTree, 'width', 160, 400);
+
+      // Editor ↔ Chat handle
+      const handle2 = document.getElementById('resize-editor-chat');
+      const paneChat = document.getElementById('pane-chat');
+      makeResizable(handle2, paneChat, 'width', 280, 600, true);
+    }
+
+    /**
+     * Make a pane resizable via a drag handle.
+     * @param {HTMLElement} handle - The resize handle element
+     * @param {HTMLElement} pane - The pane to resize
+     * @param {string} prop - 'width' or 'height'
+     * @param {number} minSize - Minimum size in px
+     * @param {number} maxSize - Maximum size in px
+     * @param {boolean} invert - If true, resizing increases from the right (for the chat pane)
+     */
+    function makeResizable(handle, pane, prop, minSize, maxSize, invert = false) {
+      let startPos = 0;
+      let startSize = 0;
+
+      handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startPos = prop === 'width' ? e.clientX : e.clientY;
+        startSize = pane.offsetWidth;
+        handle.classList.add('active');
+
+        const onMouseMove = (e) => {
+          const delta = (prop === 'width' ? e.clientX : e.clientY) - startPos;
+          let newSize;
+          if (invert) {
+            // For the chat pane on the right, dragging left increases its width
+            newSize = startSize - delta;
+          } else {
+            newSize = startSize + delta;
+          }
+          newSize = Math.max(minSize, Math.min(maxSize, newSize));
+          pane.style.width = newSize + 'px';
+
+          // Trigger Monaco layout update
+          if (kovixEditor) {
+            if (kovixEditor.editor) kovixEditor.editor.layout();
+            if (kovixEditor.diffEditor) kovixEditor.diffEditor.layout();
+          }
+        };
+
+        const onMouseUp = () => {
+          handle.classList.remove('active');
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      });
+    }
+
+    // Override the folder picker to also update the file tree
+    const originalBtnFolderHandler = document.getElementById('btn-folder');
+    // We'll re-bind after chat.js has set up its handler
+    // by using a MutationObserver or by patching chat.js directly.
+    // For now, we use a simpler approach: listen for workspace changes.
+    // The chat.js already calls api.pickFolder and updates on result.
+    // We need to extend it.
+
+    // Patch: After chat.js init, check for workspace root changes
+    // This is done in initLayout above.
+
+    // Initialize the layout once chat.js has loaded
+    initLayout().catch(err => console.error('[Layout] Init failed:', err));
+  </script>
 </body>
 </html>

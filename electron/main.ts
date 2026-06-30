@@ -393,6 +393,48 @@ function registerIpcHandlers(): void {
                 }));
         });
 
+        // ---- File system (for file tree / editor) ----
+        ipcMain.handle('fs:listDirectory', async (_event: Electron.IpcMainInvokeEvent, dirPath: string) => {
+                try {
+                        const { listDirectory } = require('../src/platform/fs') as typeof import('../src/platform/fs');
+                        const entries = await listDirectory(dirPath);
+                        // Sort: directories first, then files, alphabetical within each group.
+                        entries.sort((a, b) => {
+                                if (a[1] === b[1]) return a[0].localeCompare(b[0]);
+                                return a[1] === 'directory' ? -1 : 1;
+                        });
+                        return { entries };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('fs:readFile', async (_event: Electron.IpcMainInvokeEvent, filePath: string) => {
+                try {
+                        const { readFileText } = require('../src/platform/fs') as typeof import('../src/platform/fs');
+                        const content = await readFileText(filePath);
+                        return { content };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        // ---- Pending changes (detail) ----
+        ipcMain.handle('pending:getEntryDetail', async (_event: Electron.IpcMainInvokeEvent, filePath: string) => {
+                const entry = pendingChangesService.pendingEntries.find(e => e.uri.fsPath === filePath);
+                if (!entry) {
+                        return null;
+                }
+                return {
+                        filePath: entry.uri.fsPath,
+                        isNewFile: entry.isNewFile,
+                        originalContent: entry.originalContent,
+                        proposedContent: entry.proposedContent,
+                };
+        });
+
         // ---- Command confirmation ----
         ipcMain.handle('prompt:confirmResponse', async (_event, command: string, approved: boolean) => {
                 resolveCommandConfirmation(command, approved);
@@ -413,6 +455,8 @@ function notifyPendingChanged(): void {
         sendToRenderer('pending:changed', pendingChangesService.pendingEntries.map(e => ({
                 filePath: e.uri.fsPath,
                 isNewFile: e.isNewFile,
+                originalContent: e.originalContent,
+                proposedContent: e.proposedContent,
                 proposedContentLength: e.proposedContent.length,
         })));
 }

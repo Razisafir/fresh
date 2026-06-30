@@ -22,6 +22,7 @@ export default tseslint.config(
       '**/*.d.ts',
       '.vscode-test/**',
       'release/**',
+      'renderer/monaco/**',  // Vendored Monaco editor files — not our code
     ],
   },
 

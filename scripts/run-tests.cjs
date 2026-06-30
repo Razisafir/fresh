@@ -45,6 +45,9 @@ if (supportsFlag) {
     .join(' ');
 }
 
+// Use tsconfig.test.json for ts-node so the vscode shim type declarations resolve.
+env.TS_NODE_PROJECT = 'tsconfig.test.json';
+
 // Use shell:true so `mocha` resolves via PATH on all platforms
 // (Windows doesn't find bare binaries without the .cmd extension).
 const result = spawnSync('mocha', ['--config', '.mocharc.json', ...mochaArgs], {
