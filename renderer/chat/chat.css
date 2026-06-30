@@ -92,10 +92,18 @@ html, body {
   height: 100%;
 }
 
+/* When inside Layout B's chat pane, #app is the full layout shell.
+   The chat pane content (#pane-chat) is its own flex column. */
+#pane-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 /* --------------------------------------------------------------------------
-   Header
+   Header (now the global Layout B header, not chat-specific)
    -------------------------------------------------------------------------- */
-#panel-header {
+#layout-header {
   display: flex;
   align-items: center;
   justify-content: space-between;

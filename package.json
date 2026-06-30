@@ -44,7 +44,9 @@
     "serialize-javascript": "^7.0.6",
     "diff": "^9.0.0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "monaco-editor": "^0.55.1"
+  },
   "optionalDependencies": {
     "hnswlib-node": "^3.0.0"
   },
