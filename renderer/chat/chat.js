@@ -427,7 +427,10 @@ btnFolder.addEventListener('click', async () => {
     addMessage('system', `📂 Opened: ${result.paths.join(', ')}`);
     // Notify Layout B file tree
     if (window.fileTree && result.paths.length > 0) {
-      window.fileTree.setWorkspaceRoot(result.paths[0]);
+      console.log('[Chat] Setting fileTree workspace root:', result.paths[0]);
+      await window.fileTree.setWorkspaceRoot(result.paths[0]);
+    } else {
+      console.warn('[Chat] window.fileTree not available or no paths returned');
     }
   }
 });

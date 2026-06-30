@@ -72,6 +72,7 @@ class FileTree {
    * Set the workspace root and load the tree.
    */
   async setWorkspaceRoot(rootPath) {
+    console.log('[FileTree] setWorkspaceRoot:', rootPath);
     this.workspaceRoot = rootPath;
     this.expandedDirs.clear();
     this.activeFilePath = null;
@@ -112,12 +113,24 @@ class FileTree {
     }
 
     this.loading = true;
-    this.container.innerHTML = '';
 
     // Auto-expand the root
     this.expandedDirs.add(this.workspaceRoot);
 
-    await this.renderDirectory(this.workspaceRoot, this.container, 0);
+    // Clear container before rendering
+    this.container.innerHTML = '';
+
+    try {
+      await this.renderDirectory(this.workspaceRoot, this.container, 0);
+    } catch (err) {
+      console.error('[FileTree] render() failed:', err);
+      this.container.innerHTML = '<div class="file-tree-empty" style="color:var(--error)">Error loading files: ' + (err instanceof Error ? err.message : String(err)) + '</div>';
+    }
+
+    // If nothing was rendered (empty dir), show a message
+    if (this.container.children.length === 0) {
+      this.container.innerHTML = '<div class="file-tree-empty">Empty folder</div>';
+    }
 
     this.loading = false;
   }
@@ -126,8 +139,23 @@ class FileTree {
    * Render a single directory level.
    */
   async renderDirectory(dirPath, parentEl, depth) {
-    const result = await this.api.listDirectory(dirPath);
+    console.log('[FileTree] renderDirectory:', dirPath);
+    let result;
+    try {
+      result = await this.api.listDirectory(dirPath);
+    } catch (err) {
+      console.error('[FileTree] listDirectory IPC failed:', err);
+      const errItem = document.createElement('div');
+      errItem.className = 'tree-item';
+      errItem.style.paddingLeft = (depth * 16 + 20) + 'px';
+      errItem.textContent = 'IPC error: ' + (err instanceof Error ? err.message : String(err));
+      errItem.style.color = 'var(--error)';
+      errItem.style.fontStyle = 'italic';
+      parentEl.appendChild(errItem);
+      return;
+    }
     if (result.error) {
+      console.error('[FileTree] listDirectory returned error:', result.error);
       const errItem = document.createElement('div');
       errItem.className = 'tree-item';
       errItem.style.paddingLeft = (depth * 16 + 20) + 'px';
@@ -139,6 +167,7 @@ class FileTree {
     }
 
     const entries = result.entries || [];
+    console.log('[FileTree] Got', entries.length, 'entries for', dirPath);
 
     // Filter out skipped directories
     const filtered = entries.filter(([name, type]) => {
