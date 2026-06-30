@@ -396,7 +396,9 @@ function registerIpcHandlers(): void {
         ipcMain.handle('fs:listDirectory', async (_event: Electron.IpcMainInvokeEvent, dirPath: string) => {
                 try {
                         const { listDirectory } = require('../src/platform/fs') as typeof import('../src/platform/fs');
-                        const entries = await listDirectory(dirPath);
+                        // Normalize path separators for the current OS
+                        const normalized = path.normalize(dirPath);
+                        const entries = await listDirectory(normalized);
                         // Sort: directories first, then files, alphabetical within each group.
                         entries.sort((a, b) => {
                                 if (a[1] === b[1]) return a[0].localeCompare(b[0]);
@@ -412,7 +414,8 @@ function registerIpcHandlers(): void {
         ipcMain.handle('fs:readFile', async (_event: Electron.IpcMainInvokeEvent, filePath: string) => {
                 try {
                         const { readFileText } = require('../src/platform/fs') as typeof import('../src/platform/fs');
-                        const content = await readFileText(filePath);
+                        const normalized = path.normalize(filePath);
+                        const content = await readFileText(normalized);
                         return { content };
                 } catch (error) {
                         const msg = error instanceof Error ? error.message : String(error);

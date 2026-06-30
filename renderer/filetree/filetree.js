@@ -149,7 +149,7 @@ class FileTree {
     });
 
     for (const [name, type] of filtered) {
-      const fullPath = dirPath + '/' + name;  // Use forward slashes for consistency
+      const fullPath = dirPath + (dirPath.endsWith('\\') || dirPath.endsWith('/') ? '' : (dirPath.includes('\\') ? '\\' : '/')) + name;
       const isDir = type === 'directory';
       const isExpanded = this.expandedDirs.has(fullPath);
       const hasPending = this.pendingPaths.has(fullPath);

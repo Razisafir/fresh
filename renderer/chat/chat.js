@@ -28,6 +28,8 @@ const settingsAnthropicKey = document.getElementById('settings-anthropic-key');
 const btnSaveAnthropicKey = document.getElementById('btn-save-anthropic-key');
 const settingsNvidiaKey = document.getElementById('settings-nvidia-key');
 const btnSaveNvidiaKey = document.getElementById('btn-save-nvidia-key');
+const settingsOpenRouterKey = document.getElementById('settings-openrouter-key');
+const btnSaveOpenRouterKey = document.getElementById('btn-save-openrouter-key');
 const btnCloseSettings = document.getElementById('btn-close-settings');
 const providerSelect = document.getElementById('provider-select');
 const apiKeyProvider = document.getElementById('api-key-provider');
@@ -49,7 +51,7 @@ let state = 'idle'; // idle | planning | awaiting_approval | executing | complet
 let currentMode = 'chat'; // 'chat' | 'plan'
 let _currentPlan = null;
 let streamingMessage = null;
-let activeProvider = 'anthropic'; // 'anthropic' | 'nvidia-nim'
+let activeProvider = 'anthropic'; // 'anthropic' | 'nvidia-nim' | 'openrouter'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -443,7 +445,7 @@ btnSaveKey.addEventListener('click', async () => {
   const key = apiKeyInput.value.trim();
   const selectedProvider = apiKeyProvider ? apiKeyProvider.value : 'anthropic';
   if (key) {
-    const secretKey = selectedProvider === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : 'kovix.apiKey.anthropic';
+    const secretKey = selectedProvider === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : selectedProvider === 'openrouter' ? 'kovix.apiKey.openrouter' : 'kovix.apiKey.anthropic';
     await api.setSecret(secretKey, key);
     // Switch to this provider
     const ok = await api.switchProvider(selectedProvider);
@@ -502,11 +504,12 @@ modelSelect.addEventListener('change', async () => {
 if (providerSelect) {
   providerSelect.addEventListener('change', async () => {
     const providerType = providerSelect.value;
-    const secretKey = providerType === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : 'kovix.apiKey.anthropic';
+    const secretKey = providerType === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : providerType === 'openrouter' ? 'kovix.apiKey.openrouter' : 'kovix.apiKey.anthropic';
     const hasKey = await api.getSecret(secretKey);
     if (!hasKey) {
       // No key for this provider — open settings
-      addMessage('system', `No API key set for ${providerType === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}. Set it in Settings.`);
+      const providerLabel = providerType === 'nvidia-nim' ? 'NVIDIA NIM' : providerType === 'openrouter' ? 'OpenRouter' : 'Anthropic';
+      addMessage('system', `No API key set for ${providerLabel}. Set it in Settings.`);
       settingsModal.classList.remove('hidden');
       providerSelect.value = activeProvider;
       return;
@@ -514,7 +517,8 @@ if (providerSelect) {
     const ok = await api.switchProvider(providerType);
     if (ok) {
       activeProvider = providerType;
-      addMessage('system', `Switched to ${providerType === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}.`);
+      const providerLabel2 = providerType === 'nvidia-nim' ? 'NVIDIA NIM' : providerType === 'openrouter' ? 'OpenRouter' : 'Anthropic';
+      addMessage('system', `Switched to ${providerLabel2}.`);
       await loadModels();
     } else {
       addMessage('system', `Failed to switch to ${providerType}. Check your API key.`);
@@ -530,8 +534,10 @@ if (providerSelect) {
 btnSettings.addEventListener('click', async () => {
   const anthropicKey = await api.getSecret('kovix.apiKey.anthropic');
   const nvidiaKey = await api.getSecret('kovix.apiKey.nvidia-nim');
+  const openrouterKey = await api.getSecret('kovix.apiKey.openrouter');
   settingsAnthropicKey.value = anthropicKey || '';
   if (settingsNvidiaKey) settingsNvidiaKey.value = nvidiaKey || '';
+  if (settingsOpenRouterKey) settingsOpenRouterKey.value = openrouterKey || '';
   settingsModal.classList.remove('hidden');
 });
 
@@ -568,6 +574,25 @@ if (btnSaveNvidiaKey) {
   });
 }
 
+if (btnSaveOpenRouterKey) {
+  btnSaveOpenRouterKey.addEventListener('click', async () => {
+    const key = settingsOpenRouterKey.value.trim();
+    if (key) {
+      await api.setSecret('kovix.apiKey.openrouter', key);
+      addMessage('system', 'OpenRouter API key saved. Switching provider…');
+      settingsModal.classList.add('hidden');
+      // Auto-switch to OpenRouter
+      const ok = await api.switchProvider('openrouter');
+      if (ok) {
+        activeProvider = 'openrouter';
+        if (providerSelect) providerSelect.value = 'openrouter';
+        addMessage('system', 'Switched to OpenRouter.');
+      }
+      await loadModels();
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Init: check for API key on startup
 // ---------------------------------------------------------------------------
@@ -576,8 +601,9 @@ if (btnSaveNvidiaKey) {
   // Check for any API key
   const anthropicKey = await api.getSecret('kovix.apiKey.anthropic');
   const nvidiaKey = await api.getSecret('kovix.apiKey.nvidia-nim');
+  const openrouterKey = await api.getSecret('kovix.apiKey.openrouter');
 
-  if (!anthropicKey && !nvidiaKey) {
+  if (!anthropicKey && !nvidiaKey && !openrouterKey) {
     apiKeyModal.classList.remove('hidden');
   }
 
