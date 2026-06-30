@@ -221,6 +221,10 @@
       color: #fff;
     }
 
+    .mode-btn[data-mode="swarm"].active {
+      background: #a371f7;
+    }
+
     /* Main app container */
     #app {
       display: flex;
@@ -478,6 +482,7 @@
         <div class="mode-toggle" id="mode-toggle">
           <button class="mode-btn active" data-mode="chat" id="btn-mode-chat">Chat</button>
           <button class="mode-btn" data-mode="plan" id="btn-mode-plan">Plan</button>
+          <button class="mode-btn" data-mode="swarm" id="btn-mode-swarm">Swarm</button>
         </div>
       </div>
       <div class="toolbar-right">
@@ -516,13 +521,20 @@
         </div>
         <main id="message-list">
           <div id="welcome-message" class="welcome">
-            <p>Welcome to Kovix. Chat with AI or switch to Plan mode for structured automation.</p>
+            <p>Welcome to Kovix. Chat with AI, use Plan mode for structured automation, or Swarm mode for parallel multi-agent tasks.</p>
           </div>
         </main>
         <div id="pending-bar" class="pending-bar hidden">
           <span id="pending-count">0 pending changes</span>
           <button id="btn-accept-all" class="btn-small btn-accept">Accept all</button>
           <button id="btn-reject-all" class="btn-small btn-reject">Reject all</button>
+        </div>
+        <div id="credit-bar" class="credit-bar hidden">
+          <span class="credit-bar-label">Credits</span>
+          <div class="credit-bar-track">
+            <div class="credit-bar-fill" id="credit-fill" style="width:100%"></div>
+          </div>
+          <span class="credit-bar-text" id="credit-text">500/500</span>
         </div>
         <footer id="input-area">
           <textarea id="input-box" placeholder="Ask anything..." rows="1"></textarea>
