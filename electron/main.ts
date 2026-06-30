@@ -399,6 +399,7 @@ function registerIpcHandlers(): void {
                         const { listDirectory } = require('../src/platform/fs') as typeof import('../src/platform/fs');
                         // Normalize path separators for the current OS
                         const normalized = path.normalize(dirPath);
+                        logger.info(`[fs:listDirectory] dirPath="${dirPath}" normalized="${normalized}"`);
                         const entries = await listDirectory(normalized);
                         // Sort: directories first, then files, alphabetical within each group.
                         entries.sort((a, b) => {

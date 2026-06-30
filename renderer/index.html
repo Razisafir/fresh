@@ -279,8 +279,12 @@
     let kovixEditor = null;
 
     async function initLayout() {
+      console.log('[Layout] initLayout() starting...');
       // Initialize file tree
       const treeContainer = document.getElementById('file-tree-container');
+      if (!treeContainer) {
+        console.error('[Layout] file-tree-container not found!');
+      }
       fileTree = new KovixFileTree(treeContainer, api, {
         onFileSelect: (filePath) => handleFileSelect(filePath),
       });
@@ -302,13 +306,15 @@
       }
 
       // Check workspace roots and populate tree if available
-      const appState = await api.getAppState();
-      if (appState.workspaceRoots && appState.workspaceRoots.length > 0) {
-        await fileTree.setWorkspaceRoot(appState.workspaceRoots[0]);
-        if (welcomeMsg) {
-          welcomeMsg.querySelector('p').textContent =
-            `Workspace: ${appState.workspaceRoots[0]}. Ask anything to get started.`;
+      try {
+        const appState = await api.getAppState();
+        console.log('[Layout] appState:', JSON.stringify(appState));
+        if (appState.workspaceRoots && appState.workspaceRoots.length > 0) {
+          console.log('[Layout] Setting workspace root:', appState.workspaceRoots[0]);
+          await fileTree.setWorkspaceRoot(appState.workspaceRoots[0]);
         }
+      } catch (err) {
+        console.error('[Layout] Failed to load workspace roots:', err);
       }
 
       // Refresh tree button
