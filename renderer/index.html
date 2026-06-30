@@ -271,7 +271,8 @@
      * accessed via api.acceptChange() / api.acceptAllChanges().
      */
 
-    const api = window.__kovix_api;
+    // api is already declared by chat.js (loaded above) — reuse it.
+    // DO NOT redeclare with const/let/var or it throws SyntaxError.
 
     // ---- Initialize components ----
 
