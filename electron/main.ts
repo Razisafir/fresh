@@ -131,6 +131,9 @@ function createWindow(): void {
                 minWidth: 600,
                 minHeight: 400,
                 title: 'Kovix',
+                frame: false,                      // Frameless — custom title bar
+                titleBarStyle: 'hidden',           // macOS: hide title but keep traffic lights
+                backgroundColor: '#0d1117',        // Match the dark theme background
                 webPreferences: {
                         preload: path.join(__dirname, 'preload.js'),
                         contextIsolation: true,
@@ -436,6 +439,27 @@ function registerIpcHandlers(): void {
                         originalContent: entry.originalContent,
                         proposedContent: entry.proposedContent,
                 };
+        });
+
+        // ---- Window controls (for frameless title bar) ----
+        ipcMain.handle('window:minimize', async () => {
+                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
+        });
+        ipcMain.handle('window:maximize', async () => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                        if (mainWindow.isMaximized()) {
+                                mainWindow.unmaximize();
+                        } else {
+                                mainWindow.maximize();
+                        }
+                }
+        });
+        ipcMain.handle('window:close', async () => {
+                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+        });
+        ipcMain.handle('window:isMaximized', async () => {
+                if (mainWindow && !mainWindow.isDestroyed()) return mainWindow.isMaximized();
+                return false;
         });
 
         // ---- Command confirmation ----
