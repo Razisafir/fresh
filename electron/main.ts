@@ -27,6 +27,8 @@ import { initToolRegistry } from '../src/tools/toolRegistryService';
 import { initAgentLoop, getAgentLoop } from '../src/agent/agentLoop';
 import { McpManager } from '../src/mcp/mcpManager';
 import { resolveCommandConfirmation } from '../src/platform/prompts';
+import { initCostGovernor, getCreditSystem } from '../src/swarm/costGovernor';
+import { getSwarmOrchestrator, resolveSwarmApproval } from '../src/swarm/orchestrator';
 import { logger } from '../src/util/logger';
 import type { IApprovedPlan, AgentLoopEvent } from '../src/types/agent';
 
@@ -93,6 +95,10 @@ app.whenReady().then(async () => {
         void mcpManager.start().then(() => {
                 logger.verbose(`[MCP] Started: ${mcpManager!.connectedServerCount} servers, ${mcpManager!.registeredToolCount} tools registered`);
         });
+
+        // 7. Cost governor (required before swarm — per 08_SWARM_DESIGN.md §5).
+        const { creditSystem } = initCostGovernor({ totalCredits: 500, enabled: true });
+        logger.info(`[Main] Cost governor initialized: ${creditSystem.getTotalCredits()} credits.`);
 
         // Create the main window.
         createWindow();
@@ -440,6 +446,60 @@ function registerIpcHandlers(): void {
                         originalContent: entry.originalContent,
                         proposedContent: entry.proposedContent,
                 };
+        });
+
+        // ---- Swarm (multi-agent) ----
+        ipcMain.handle('swarm:execute', async (_event: Electron.IpcMainInvokeEvent, planData: unknown) => {
+                if (!aiService) return { error: 'AI service not initialized' };
+                try {
+                        const plan = planData as IApprovedPlan;
+                        const orchestrator = getSwarmOrchestrator(aiService);
+                        const stream = orchestrator.execute(plan, {
+                                aiService,
+                                toolRegistry: initToolRegistry(),
+                                pendingChanges: pendingChangesService,
+                                workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                        });
+
+                        for await (const event of stream) {
+                                sendToRenderer('swarm:event', event);
+                        }
+                        return { success: true };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('swarm:approvePartition', async () => {
+                resolveSwarmApproval(true);
+                return { success: true };
+        });
+
+        ipcMain.handle('swarm:rejectPartition', async () => {
+                resolveSwarmApproval(false);
+                return { success: true };
+        });
+
+        // ---- Cost governor ----
+        ipcMain.handle('credits:getStatus', async () => {
+                const cs = getCreditSystem();
+                return {
+                        remaining: cs.getCreditsRemaining(),
+                        total: cs.getTotalCredits(),
+                        enabled: cs.isEnabled(),
+                        stats: cs.getStats(),
+                };
+        });
+
+        ipcMain.handle('credits:add', async (_event: Electron.IpcMainInvokeEvent, amount: number) => {
+                getCreditSystem().addCredits(amount);
+                return { success: true };
+        });
+
+        ipcMain.handle('credits:reset', async () => {
+                getCreditSystem().reset();
+                return { success: true };
         });
 
         // ---- Window controls (for frameless title bar) ----

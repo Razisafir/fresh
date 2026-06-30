@@ -54,6 +54,16 @@ const api = {
         windowClose: () => ipcRenderer.invoke('window:close'),
         windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
 
+        // ---- Swarm (multi-agent) ----
+        swarmExecute: (plan: unknown) => ipcRenderer.invoke('swarm:execute', plan),
+        swarmApprovePartition: () => ipcRenderer.invoke('swarm:approvePartition'),
+        swarmRejectPartition: () => ipcRenderer.invoke('swarm:rejectPartition'),
+
+        // ---- Credits / Cost governor ----
+        getCreditsStatus: () => ipcRenderer.invoke('credits:getStatus'),
+        addCredits: (amount: number) => ipcRenderer.invoke('credits:add', amount),
+        resetCredits: () => ipcRenderer.invoke('credits:reset'),
+
         // ---- Command confirmation ----
         respondToConfirmation: (command: string, approved: boolean) =>
                 ipcRenderer.invoke('prompt:confirmResponse', command, approved),
@@ -73,6 +83,11 @@ const api = {
                 const handler = (_event: Electron.IpcRendererEvent, command: string) => callback(command);
                 ipcRenderer.on('prompt:confirmCommand', handler);
                 return () => { ipcRenderer.removeListener('prompt:confirmCommand', handler); };
+        },
+        onSwarmEvent: (callback: (event: unknown) => void) => {
+                const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+                ipcRenderer.on('swarm:event', handler);
+                return () => { ipcRenderer.removeListener('swarm:event', handler); };
         },
 };
 
