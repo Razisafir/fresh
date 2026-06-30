@@ -76,7 +76,9 @@ class FileTree {
     this.workspaceRoot = rootPath;
     this.expandedDirs.clear();
     this.activeFilePath = null;
+    this.container.innerHTML = '<div class="file-tree-empty">Loading files…</div>';
     await this.render();
+    console.log('[FileTree] render() complete. Children:', this.container.children.length);
   }
 
   /**

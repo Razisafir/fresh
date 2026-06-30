@@ -280,7 +280,8 @@
 
     async function initLayout() {
       console.log('[Layout] initLayout() starting...');
-      // Initialize file tree
+
+      // Initialize file tree FIRST (don't block on Monaco)
       const treeContainer = document.getElementById('file-tree-container');
       if (!treeContainer) {
         console.error('[Layout] file-tree-container not found!');
@@ -290,8 +291,30 @@
       });
       // Expose globally so chat.js can update on folder pick
       window.fileTree = fileTree;
+      console.log('[Layout] fileTree created and exposed to window');
 
-      // Initialize Monaco editor
+      // Load workspace into tree IMMEDIATELY (before Monaco)
+      try {
+        const appState = await api.getAppState();
+        console.log('[Layout] appState:', JSON.stringify(appState));
+        if (appState.workspaceRoots && appState.workspaceRoots.length > 0) {
+          console.log('[Layout] Setting workspace root:', appState.workspaceRoots[0]);
+
+          // Quick test: does listDirectory work at all?
+          try {
+            const testResult = await api.listDirectory(appState.workspaceRoots[0]);
+            console.log('[Layout] listDirectory test result:', JSON.stringify(testResult));
+          } catch (testErr) {
+            console.error('[Layout] listDirectory test FAILED:', testErr);
+          }
+
+          await fileTree.setWorkspaceRoot(appState.workspaceRoots[0]);
+        }
+      } catch (err) {
+        console.error('[Layout] Failed to load workspace roots:', err);
+      }
+
+      // Initialize Monaco editor (non-blocking for tree)
       const editorContainer = document.getElementById('editor-container');
       const editorHeader = document.getElementById('editor-header');
       kovixEditor = new KovixEditor(editorContainer, editorHeader, api, {
@@ -299,23 +322,12 @@
         onReject: (filePath) => handleChangeResolved(filePath),
       });
 
-      try {
-        await kovixEditor.init();
-      } catch (err) {
+      // Init Monaco in background — don't await it
+      kovixEditor.init().then(() => {
+        console.log('[Layout] Monaco editor initialized');
+      }).catch(err => {
         console.error('[Layout] Failed to initialize Monaco editor:', err);
-      }
-
-      // Check workspace roots and populate tree if available
-      try {
-        const appState = await api.getAppState();
-        console.log('[Layout] appState:', JSON.stringify(appState));
-        if (appState.workspaceRoots && appState.workspaceRoots.length > 0) {
-          console.log('[Layout] Setting workspace root:', appState.workspaceRoots[0]);
-          await fileTree.setWorkspaceRoot(appState.workspaceRoots[0]);
-        }
-      } catch (err) {
-        console.error('[Layout] Failed to load workspace roots:', err);
-      }
+      });
 
       // Refresh tree button
       document.getElementById('btn-refresh-tree').addEventListener('click', () => {
