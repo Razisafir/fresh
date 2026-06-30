@@ -361,6 +361,7 @@ function registerIpcHandlers(): void {
                 return [
                         { type: 'anthropic', displayName: 'Anthropic', activeModel: aiService?.getProvider('anthropic')?.getActiveModel()?.id ?? '' },
                         { type: 'nvidia-nim', displayName: 'NVIDIA NIM', activeModel: aiService?.getProvider('nvidia-nim')?.getActiveModel()?.id ?? '' },
+                        { type: 'openrouter', displayName: 'OpenRouter', activeModel: aiService?.getProvider('openrouter')?.getActiveModel()?.id ?? '' },
                 ];
         });
 
