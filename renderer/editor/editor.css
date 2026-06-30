@@ -1,5 +1,5 @@
 /* ==========================================================================
-   editor.css — Monaco editor panel styling for Kovix Layout B.
+   editor.css — Premium Chromium-style Monaco editor panel for Kovix Layout B.
    ========================================================================== */
 
 .editor-panel {
@@ -7,24 +7,23 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: var(--bg-base);
+  background: #0d1117;
 }
 
 .editor-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--space-xs) var(--space-md);
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
+  padding: 2px 12px;
+  background: #0d1117;
+  border-bottom: 1px solid #161b22;
   flex-shrink: 0;
-  min-height: 32px;
+  min-height: 26px;
 }
 
 .editor-file-path {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
+  font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  color: #484f58;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -32,50 +31,50 @@
 }
 
 .editor-diff-badge {
-  font-size: var(--font-size-xs);
+  font-size: 11px;
   font-weight: 600;
-  padding: 2px var(--space-sm);
-  border-radius: var(--radius-sm);
-  background: var(--accent-muted);
-  color: var(--accent);
-  margin-left: var(--space-sm);
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(124, 131, 255, 0.12);
+  color: #7c83ff;
+  margin-left: 8px;
   flex-shrink: 0;
 }
 
 .editor-actions {
   display: flex;
-  gap: var(--space-xs);
+  gap: 4px;
   align-items: center;
   flex-shrink: 0;
-  margin-left: var(--space-sm);
+  margin-left: 8px;
 }
 
 .editor-actions button {
-  padding: 2px var(--space-sm);
-  font-size: var(--font-size-xs);
+  padding: 3px 10px;
+  font-size: 11px;
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   border: none;
   cursor: pointer;
-  transition: background var(--transition);
+  transition: background 120ms ease;
 }
 
 .btn-editor-accept {
-  background: var(--success);
-  color: var(--text-inverse);
+  background: #238636;
+  color: #fff;
 }
 
 .btn-editor-accept:hover {
-  background: #3ba897;
+  background: #2ea043;
 }
 
 .btn-editor-reject {
-  background: var(--error);
-  color: white;
+  background: #da3633;
+  color: #fff;
 }
 
 .btn-editor-reject:hover {
-  background: #d63636;
+  background: #f85149;
 }
 
 .editor-container {
@@ -89,26 +88,26 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-muted);
-  font-size: var(--font-size-lg);
-  gap: var(--space-md);
+  color: #484f58;
+  font-size: 16px;
+  gap: 12px;
 }
 
 .editor-empty-icon {
   font-size: 48px;
-  opacity: 0.3;
+  opacity: 0.15;
 }
 
 .editor-empty-hint {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
+  font-size: 12px;
+  color: #484f58;
 }
 
-/* Override some Monaco defaults to match our dark theme */
+/* Override Monaco to match our deep dark theme */
 .editor-container .monaco-editor,
 .editor-container .monaco-editor .margin,
 .editor-container .monaco-editor-background {
-  background-color: var(--bg-base) !important;
+  background-color: #0d1117 !important;
 }
 
 .editor-container .monaco-editor .line {

@@ -48,6 +48,12 @@ const api = {
         getSecret: (key: string) => ipcRenderer.invoke('secrets:get', key),
         setSecret: (key: string, value: string) => ipcRenderer.invoke('secrets:set', key, value),
 
+        // ---- Window controls (for frameless title bar) ----
+        windowMinimize: () => ipcRenderer.invoke('window:minimize'),
+        windowMaximize: () => ipcRenderer.invoke('window:maximize'),
+        windowClose: () => ipcRenderer.invoke('window:close'),
+        windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+
         // ---- Command confirmation ----
         respondToConfirmation: (command: string, approved: boolean) =>
                 ipcRenderer.invoke('prompt:confirmResponse', command, approved),

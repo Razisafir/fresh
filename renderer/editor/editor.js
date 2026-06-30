@@ -5,6 +5,7 @@
  *   - Syntax-highlighted file viewing (read from IPC)
  *   - Diff view for pending changes (original vs proposed)
  *   - Accept/Reject actions that go through pendingChangesService
+ *   - Tab integration via onFileOpen callback
  *
  * CRITICAL CONSTRAINT: The editor NEVER writes directly to disk.
  * Monaco's onDidChangeModelContent only updates an in-memory model.
@@ -50,7 +51,6 @@ const LANG_MAP = {
 function getLanguageId(filePath) {
   if (!filePath) return 'plaintext';
   const basename = filePath.split('/').pop() || filePath.split('\\').pop() || '';
-  // Check exact filename matches first
   if (basename === 'Dockerfile') return 'dockerfile';
   if (basename === 'Makefile') return 'makefile';
   if (basename === '.gitignore' || basename === '.env') return 'plaintext';
@@ -70,6 +70,7 @@ class KovixEditor {
    * @param {object} options
    * @param {function} options.onAccept - Called after a change is accepted: (filePath: string) => void
    * @param {function} options.onReject - Called after a change is rejected: (filePath: string) => void
+   * @param {function} options.onFileOpen - Called when a file is opened: (filePath: string) => void
    */
   constructor(container, headerEl, api, options = {}) {
     this.container = container;
@@ -77,6 +78,7 @@ class KovixEditor {
     this.api = api;
     this.onAccept = options.onAccept || (() => {});
     this.onReject = options.onReject || (() => {});
+    this.onFileOpen = options.onFileOpen || (() => {});
 
     this.monaco = null;          // Monaco API reference
     this.editor = null;          // Current editor instance
@@ -96,13 +98,11 @@ class KovixEditor {
    */
   async init() {
     return new Promise((resolve, reject) => {
-      // Monaco is loaded via AMD loader configured in index.html.
-      // require is the AMD require, not Node's require.
-      const amdRequire = window.require;  // AMD require set by Monaco's loader
+      const amdRequire = window.require;
       amdRequire(['vs/editor/editor.main'], (monacoApi) => {
         this.monaco = monacoApi;
 
-        // Define a dark theme matching our design tokens
+        // Define a dark theme matching our Chromium-style design
         this.monaco.editor.defineTheme('kovix-dark', {
           base: 'vs-dark',
           inherit: true,
@@ -116,18 +116,23 @@ class KovixEditor {
             { token: 'variable', foreground: '9CDCFE' },
           ],
           colors: {
-            'editor.background': '#1e1e1e',
-            'editor.foreground': '#cccccc',
-            'editor.lineHighlightBackground': '#2a2a2a',
+            'editor.background': '#0d1117',
+            'editor.foreground': '#e6edf3',
+            'editor.lineHighlightBackground': '#161b22',
             'editor.selectionBackground': '#264f78',
             'editorCursor.foreground': '#7c83ff',
-            'editorLineNumber.foreground': '#5a5a5a',
-            'editorLineNumber.activeForeground': '#cccccc',
-            'editor.inactiveSelectionBackground': '#3a3d4110',
-            'diffEditor.insertedTextBackground': '#4ec9b020',
-            'diffEditor.insertedLineBackground': '#4ec9b015',
-            'diffEditor.removedTextBackground': '#f4474720',
-            'diffEditor.removedLineBackground': '#f4474715',
+            'editorLineNumber.foreground': '#30363d',
+            'editorLineNumber.activeForeground': '#8b949e',
+            'editor.inactiveSelectionBackground': '#1c2128',
+            'diffEditor.insertedTextBackground': '#3fb95020',
+            'diffEditor.insertedLineBackground': '#3fb95012',
+            'diffEditor.removedTextBackground': '#f8514920',
+            'diffEditor.removedLineBackground': '#f8514912',
+            'editorWidget.background': '#161b22',
+            'editorWidget.border': '#30363d',
+            'editorSuggestWidget.background': '#161b22',
+            'editorSuggestWidget.border': '#30363d',
+            'editorSuggestWidget.selectedBackground': '#1c2128',
           },
         });
 
@@ -163,6 +168,9 @@ class KovixEditor {
   async openFile(filePath) {
     this.currentFilePath = filePath;
 
+    // Notify the tab system
+    this.onFileOpen(filePath);
+
     // Read the file content via IPC
     const result = await this.api.readFile(filePath);
     if (result.error) {
@@ -177,14 +185,30 @@ class KovixEditor {
     const pendingDetail = await this.api.getPendingEntryDetail(filePath);
 
     if (pendingDetail) {
-      // Show diff view
       this.pendingEntry = pendingDetail;
       await this._showDiff(pendingDetail.originalContent, pendingDetail.proposedContent, language);
     } else {
-      // Show normal editor
       this.pendingEntry = null;
       this._showEditor(content, language);
     }
+  }
+
+  /**
+   * Close the current file and show empty state.
+   */
+  closeFile() {
+    this.currentFilePath = null;
+    this.pendingEntry = null;
+    this.isDiffMode = false;
+
+    if (this.editor) { this.editor.dispose(); this.editor = null; }
+    if (this.diffEditor) { this.diffEditor.dispose(); this.diffEditor = null; }
+    if (this.currentModel) { this.currentModel.dispose(); this.currentModel = null; }
+    if (this._diffOriginalModel) { this._diffOriginalModel.dispose(); this._diffOriginalModel = null; }
+    if (this._diffModifiedModel) { this._diffModifiedModel.dispose(); this._diffModifiedModel = null; }
+
+    this._createEmptyState();
+    this._updateHeader(false);
   }
 
   /**
@@ -201,11 +225,7 @@ class KovixEditor {
 
     // Clear container
     this.container.innerHTML = '';
-
-    // Remove empty state if present
-    if (this.emptyEl) {
-      this.emptyEl = null;
-    }
+    if (this.emptyEl) this.emptyEl = null;
 
     // Create editor wrapper
     this.editorWrapperEl = document.createElement('div');
@@ -217,12 +237,10 @@ class KovixEditor {
     this._updateHeader(false);
 
     // Create model
-    if (this.currentModel) {
-      this.currentModel.dispose();
-    }
+    if (this.currentModel) this.currentModel.dispose();
     this.currentModel = this.monaco.editor.createModel(content, language);
 
-    // Create editor — READ ONLY (the only write path is pendingChangesService.accept())
+    // Create editor — READ ONLY
     this.editor = this.monaco.editor.create(this.editorWrapperEl, {
       model: this.currentModel,
       theme: 'kovix-dark',
@@ -235,6 +253,10 @@ class KovixEditor {
       renderLineHighlight: 'all',
       automaticLayout: true,
       padding: { top: 8 },
+      scrollbar: {
+        verticalScrollbarSize: 8,
+        horizontalScrollbarSize: 8,
+      },
     });
   }
 
@@ -244,40 +266,26 @@ class KovixEditor {
   async _showDiff(originalContent, proposedContent, language) {
     this.isDiffMode = true;
 
-    // Dispose previous editors
-    if (this.editor) {
-      this.editor.dispose();
-      this.editor = null;
-    }
-    if (this.currentModel) {
-      this.currentModel.dispose();
-      this.currentModel = null;
-    }
+    if (this.editor) { this.editor.dispose(); this.editor = null; }
+    if (this.currentModel) { this.currentModel.dispose(); this.currentModel = null; }
 
-    // Clear container
     this.container.innerHTML = '';
-    if (this.emptyEl) {
-      this.emptyEl = null;
-    }
+    if (this.emptyEl) this.emptyEl = null;
 
-    // Create editor wrapper
     this.editorWrapperEl = document.createElement('div');
     this.editorWrapperEl.style.width = '100%';
     this.editorWrapperEl.style.height = '100%';
     this.container.appendChild(this.editorWrapperEl);
 
-    // Update header with diff badge + actions
     this._updateHeader(true);
 
-    // Create models for diff
     const originalModel = this.monaco.editor.createModel(originalContent || '', language);
     const modifiedModel = this.monaco.editor.createModel(proposedContent || '', language);
 
-    // Create diff editor — BOTH SIDES READ ONLY
     this.diffEditor = this.monaco.editor.createDiffEditor(this.editorWrapperEl, {
       theme: 'kovix-dark',
-      readOnly: true,            // Original is read-only
-      renderSideBySide: true,    // Side-by-side diff view
+      readOnly: true,
+      renderSideBySide: true,
       minimap: { enabled: false },
       fontSize: 13,
       lineHeight: 20,
@@ -285,9 +293,11 @@ class KovixEditor {
       scrollBeyondLastLine: false,
       automaticLayout: true,
       padding: { top: 8 },
-      // The diff editor's modified side is also read-only:
-      // the only write path is pendingChangesService.accept()
       originalEditable: false,
+      scrollbar: {
+        verticalScrollbarSize: 8,
+        horizontalScrollbarSize: 8,
+      },
     });
 
     this.diffEditor.setModel({
@@ -295,7 +305,6 @@ class KovixEditor {
       modified: modifiedModel,
     });
 
-    // Store modified model for later cleanup
     this._diffOriginalModel = originalModel;
     this._diffModifiedModel = modifiedModel;
   }
@@ -304,25 +313,24 @@ class KovixEditor {
    * Update the header bar.
    */
   _updateHeader(isDiff) {
-    // Clear header
     this.headerEl.innerHTML = '';
 
-    // File path
     const pathEl = document.createElement('span');
     pathEl.className = 'editor-file-path';
-    // Show relative path from workspace root if possible
-    pathEl.textContent = this.currentFilePath ? this.currentFilePath.split('/').pop() : '';
+    // Show just the filename — the tab bar shows it too but this gives context
+    const fileName = this.currentFilePath
+      ? (this.currentFilePath.split('/').pop() || this.currentFilePath.split('\\').pop() || this.currentFilePath)
+      : '';
+    pathEl.textContent = fileName;
     pathEl.title = this.currentFilePath || '';
     this.headerEl.appendChild(pathEl);
 
     if (isDiff) {
-      // Diff badge
       const badge = document.createElement('span');
       badge.className = 'editor-diff-badge';
       badge.textContent = 'Pending Change';
       this.headerEl.appendChild(badge);
 
-      // Actions
       const actions = document.createElement('div');
       actions.className = 'editor-actions';
 
@@ -342,36 +350,25 @@ class KovixEditor {
     }
   }
 
-  /**
-   * Accept a pending change via the pendingChangesService.
-   */
   async _acceptChange() {
     if (!this.currentFilePath) return;
     await this.api.acceptChange(this.currentFilePath);
     this.onAccept(this.currentFilePath);
-    // Re-open the file to show the accepted state
     await this.openFile(this.currentFilePath);
   }
 
-  /**
-   * Reject a pending change via the pendingChangesService.
-   */
   async _rejectChange() {
     if (!this.currentFilePath) return;
     await this.api.rejectChange(this.currentFilePath);
     this.onReject(this.currentFilePath);
-    // Re-open the file to show the reverted state
     await this.openFile(this.currentFilePath);
   }
 
-  /**
-   * Show an error message in the editor area.
-   */
   _showError(message) {
     this.container.innerHTML = '';
     const errEl = document.createElement('div');
     errEl.className = 'editor-empty';
-    errEl.innerHTML = `<div style="color:var(--error)">${this._escapeHtml(message)}</div>`;
+    errEl.innerHTML = `<div style="color:#f85149">${this._escapeHtml(message)}</div>`;
     this.container.appendChild(errEl);
     this._updateHeader(false);
   }
@@ -380,9 +377,6 @@ class KovixEditor {
     return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  /**
-   * Clean up editors and models.
-   */
   dispose() {
     if (this.editor) { this.editor.dispose(); this.editor = null; }
     if (this.diffEditor) { this.diffEditor.dispose(); this.diffEditor = null; }
