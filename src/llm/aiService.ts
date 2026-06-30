@@ -25,6 +25,9 @@ import {
 import { AnthropicProvider } from './providers/anthropicProvider';
 import { NvidiaProvider } from './providers/nvidiaProvider';
 import { OpenRouterProvider } from './providers/openrouterProvider';
+import { OpenAIProvider } from './providers/openaiProvider';
+import { OllamaProvider } from './providers/ollamaProvider';
+import { DeepSeekProvider } from './providers/deepseekProvider';
 import { getAppState } from '../platform/appState';
 
 // ---------------------------------------------------------------------------
@@ -120,6 +123,45 @@ export class ConstructAIService implements IConstructAIService, Disposable {
                 });
                 openrouter.onDidChangeStatus(s => {
                         logger.verbose(`[ConstructAIService] openrouter status → ${s}`);
+                });
+
+                // Register OpenAI provider.
+                const openai = new OpenAIProvider(secrets);
+                this._providers.set('openai', openai);
+
+                openai.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === openai) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                openai.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] openai status → ${s}`);
+                });
+
+                // Register Ollama (local) provider.
+                const ollama = new OllamaProvider(secrets);
+                this._providers.set('ollama', ollama);
+
+                ollama.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === ollama) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                ollama.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] ollama status → ${s}`);
+                });
+
+                // Register DeepSeek provider.
+                const deepseek = new DeepSeekProvider(secrets);
+                this._providers.set('deepseek', deepseek);
+
+                deepseek.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === deepseek) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                deepseek.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] deepseek status → ${s}`);
                 });
 
                 // Pick the active provider from config (default: anthropic).

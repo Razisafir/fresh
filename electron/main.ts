@@ -29,6 +29,10 @@ import { McpManager } from '../src/mcp/mcpManager';
 import { resolveCommandConfirmation } from '../src/platform/prompts';
 import { initCostGovernor, getCreditSystem } from '../src/swarm/costGovernor';
 import { getSwarmOrchestrator, resolveSwarmApproval } from '../src/swarm/orchestrator';
+import { getGitService } from '../src/git';
+import { initConversationStore, getConversationStore } from '../src/memory/conversationStore';
+import { initCodebaseIndexer, getCodebaseIndexer } from '../src/memory/codebaseIndexer';
+import { getFileWatcherService } from '../src/platform/fileWatcher';
 import { logger } from '../src/util/logger';
 import type { IApprovedPlan, AgentLoopEvent } from '../src/types/agent';
 
@@ -100,6 +104,28 @@ app.whenReady().then(async () => {
         const { creditSystem } = initCostGovernor({ totalCredits: 500, enabled: true });
         logger.info(`[Main] Cost governor initialized: ${creditSystem.getTotalCredits()} credits.`);
 
+        // 8. Conversation store (chat persistence).
+        const stateDir = path.join(app.getPath('userData'), 'kovix-state');
+        initConversationStore(stateDir);
+        logger.info('[Main] Conversation store initialized.');
+
+        // 9. Codebase indexer (RAG).
+        initCodebaseIndexer(stateDir);
+        logger.info('[Main] Codebase indexer initialized.');
+
+        // 10. File watcher.
+        const fileWatcher = getFileWatcherService();
+        // Forward file change events to renderer.
+        fileWatcher.onDidChange(e => sendToRenderer('file:changed', e));
+        fileWatcher.onDidCreate(e => sendToRenderer('file:created', e));
+        fileWatcher.onDidDelete(e => sendToRenderer('file:deleted', e));
+
+        // Start watching workspace roots.
+        if (state.workspaceRoots.roots.length > 0) {
+                fileWatcher.startWatching([...state.workspaceRoots.roots]);
+                logger.info(`[Main] File watcher started for ${state.workspaceRoots.roots.length} root(s).`);
+        }
+
         // Create the main window.
         createWindow();
 
@@ -110,7 +136,8 @@ app.whenReady().then(async () => {
                 `Kovix ready. AI provider: ${aiService.activeProviderType ?? 'none'}, ` +
                 `tools: ${registry.listTools().length}, ` +
                 `agent loop: ready, ` +
-                `MCP: ${mcpManager.connectedServerCount} servers.`,
+                `MCP: ${mcpManager.connectedServerCount} servers, ` +
+                `providers: ${aiService.activeProviderType ?? 'none'}.`,
         );
 });
 
@@ -362,6 +389,9 @@ function registerIpcHandlers(): void {
                         { type: 'anthropic', displayName: 'Anthropic', activeModel: aiService?.getProvider('anthropic')?.getActiveModel()?.id ?? '' },
                         { type: 'nvidia-nim', displayName: 'NVIDIA NIM', activeModel: aiService?.getProvider('nvidia-nim')?.getActiveModel()?.id ?? '' },
                         { type: 'openrouter', displayName: 'OpenRouter', activeModel: aiService?.getProvider('openrouter')?.getActiveModel()?.id ?? '' },
+                        { type: 'openai', displayName: 'OpenAI', activeModel: aiService?.getProvider('openai')?.getActiveModel()?.id ?? '' },
+                        { type: 'ollama', displayName: 'Ollama (Local)', activeModel: aiService?.getProvider('ollama')?.getActiveModel()?.id ?? '' },
+                        { type: 'deepseek', displayName: 'DeepSeek', activeModel: aiService?.getProvider('deepseek')?.getActiveModel()?.id ?? '' },
                 ];
         });
 
@@ -500,6 +530,156 @@ function registerIpcHandlers(): void {
         ipcMain.handle('credits:reset', async () => {
                 getCreditSystem().reset();
                 return { success: true };
+        });
+
+        // ---- Git integration ----
+        const gitService = getGitService();
+
+        ipcMain.handle('git:status', async (_event, repoPath: string) => {
+                try { return await gitService.getStatus(repoPath); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:branches', async (_event, repoPath: string) => {
+                try { return await gitService.getBranches(repoPath); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:log', async (_event, repoPath: string, count?: number) => {
+                try { return await gitService.getLog(repoPath, count); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:diff', async (_event, repoPath: string, options?: { staged?: boolean; filePath?: string }) => {
+                try { return await gitService.getDiff(repoPath, options); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:diffSummary', async (_event, repoPath: string) => {
+                try { return await gitService.getDiffSummary(repoPath); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:stage', async (_event, repoPath: string, filePaths: string[]) => {
+                await gitService.stage(repoPath, filePaths);
+        });
+
+        ipcMain.handle('git:unstage', async (_event, repoPath: string, filePaths: string[]) => {
+                await gitService.unstage(repoPath, filePaths);
+        });
+
+        ipcMain.handle('git:commit', async (_event, repoPath: string, message: string) => {
+                return await gitService.commit(repoPath, message);
+        });
+
+        ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string) => {
+                await gitService.checkout(repoPath, branch);
+        });
+
+        ipcMain.handle('git:createBranch', async (_event, repoPath: string, name: string, checkout?: boolean) => {
+                await gitService.createBranch(repoPath, name, checkout);
+        });
+
+        ipcMain.handle('git:deleteBranch', async (_event, repoPath: string, name: string, force?: boolean) => {
+                await gitService.deleteBranch(repoPath, name, force);
+        });
+
+        ipcMain.handle('git:pull', async (_event, repoPath: string, remote?: string, branch?: string) => {
+                return await gitService.pull(repoPath, remote, branch);
+        });
+
+        ipcMain.handle('git:push', async (_event, repoPath: string, remote?: string, branch?: string) => {
+                await gitService.push(repoPath, remote, branch);
+        });
+
+        ipcMain.handle('git:stash', async (_event, repoPath: string, message?: string) => {
+                await gitService.stash(repoPath, message);
+        });
+
+        ipcMain.handle('git:stashPop', async (_event, repoPath: string) => {
+                await gitService.stashPop(repoPath);
+        });
+
+        ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string) => {
+                return await gitService.blame(repoPath, filePath);
+        });
+
+        ipcMain.handle('git:fileHistory', async (_event, repoPath: string, filePath: string, count?: number) => {
+                return await gitService.getFileHistory(repoPath, filePath, count);
+        });
+
+        ipcMain.handle('git:remotes', async (_event, repoPath: string) => {
+                return await gitService.getRemotes(repoPath);
+        });
+
+        ipcMain.handle('git:init', async (_event, repoPath: string) => {
+                await gitService.init(repoPath);
+        });
+
+        // ---- Conversation store ----
+        ipcMain.handle('conversation:list', async () => {
+                return await getConversationStore().listConversations();
+        });
+
+        ipcMain.handle('conversation:load', async (_event, id: string) => {
+                return await getConversationStore().loadConversation(id);
+        });
+
+        ipcMain.handle('conversation:create', async (_event, title?: string) => {
+                return await getConversationStore().createConversation(title);
+        });
+
+        ipcMain.handle('conversation:delete', async (_event, id: string) => {
+                await getConversationStore().deleteConversation(id);
+        });
+
+        ipcMain.handle('conversation:getActive', async () => {
+                return await getConversationStore().getActiveConversation();
+        });
+
+        ipcMain.handle('conversation:setActive', async (_event, id: string) => {
+                await getConversationStore().setActiveConversation(id);
+        });
+
+        ipcMain.handle('conversation:addMessage', async (_event, conversationId: string, message: unknown) => {
+                const stored = message as import('../src/memory/conversationStore').IStoredMessage;
+                const chatMsg: import('../src/types/llm').IChatMessage = {
+                        role: stored.role as 'user' | 'assistant' | 'system',
+                        content: stored.content,
+                };
+                await getConversationStore().addMessage(conversationId, chatMsg);
+        });
+
+        // ---- Codebase indexer ----
+        ipcMain.handle('indexer:status', async () => {
+                return getCodebaseIndexer().getIndexStatus();
+        });
+
+        ipcMain.handle('indexer:start', async (_event, rootPath: string, options?: unknown) => {
+                const indexer = getCodebaseIndexer();
+                const results = [];
+                for await (const progress of indexer.indexWorkspace(rootPath, options as any)) {
+                        sendToRenderer('indexer:progress', progress);
+                        results.push(progress);
+                }
+                return results;
+        });
+
+        ipcMain.handle('indexer:search', async (_event, query: string, options?: unknown) => {
+                return await getCodebaseIndexer().search(query, options as any);
+        });
+
+        ipcMain.handle('indexer:fileContext', async (_event, filePath: string, options?: unknown) => {
+                return await getCodebaseIndexer().getFileContext(filePath, options as any);
+        });
+
+        // ---- File watcher ----
+        ipcMain.handle('watcher:start', async (_event, rootPaths: string[]) => {
+                getFileWatcherService().startWatching(rootPaths);
+        });
+
+        ipcMain.handle('watcher:stop', async () => {
+                getFileWatcherService().stopWatching();
         });
 
         // ---- Window controls (for frameless title bar) ----
