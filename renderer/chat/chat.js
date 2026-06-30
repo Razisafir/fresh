@@ -88,8 +88,18 @@ function renderMarkdown(text) {
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     // Bold
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    // Headers
+    .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
     // Lists (simple: - item)
     .replace(/^- (.+)$/gm, '<li>$1</li>')
+    // Numbered lists
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    // Links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
     // Paragraphs (double newline)
     .replace(/\n\n/g, '</p><p>')
     // Single newlines within paragraphs
@@ -491,9 +501,10 @@ api.onAgentEvent((event) => {
       if (!streamingMessage) {
         streamingMessage = addMessage('agent', '', { streaming: true });
       }
-      streamingMessage.innerHTML = renderMarkdown(
-        (streamingMessage.innerText || '') + event.text
-      );
+      // Accumulate raw text, then render markdown from full accumulated text
+      if (!streamingMessage._rawText) streamingMessage._rawText = '';
+      streamingMessage._rawText += event.text;
+      streamingMessage.innerHTML = renderMarkdown(streamingMessage._rawText);
       messageList.scrollTop = messageList.scrollHeight;
       break;
     case 'tool_start':
