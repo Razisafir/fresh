@@ -335,7 +335,7 @@ export class NvidiaProvider implements IConstructAIProvider, Disposable {
                         return Math.ceil(chars / CHARS_PER_TOKEN);
                 };
 
-                let totalTokens = estimateTokens(messages);
+                const totalTokens = estimateTokens(messages);
                 if (totalTokens <= maxTokens) return messages;
 
                 logger.warn(`[NvidiaProvider] Context too large (~${totalTokens} tokens, budget ${maxTokens}). Trimming history.`);

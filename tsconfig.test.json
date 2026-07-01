@@ -8,6 +8,13 @@
     "tsBuildInfoFile": "./dist/.tsbuildinfo.test",
     "typeRoots": ["./test/_setup", "./node_modules/@types"]
   },
+  "ts-node": {
+    "compilerOptions": {
+      "module": "CommonJS",
+      "moduleResolution": "Node"
+    },
+    "transpileOnly": true
+  },
   "include": [
     "src/**/*.ts",
     "test/**/*.ts",
