@@ -1,0 +1,115 @@
+/* ==========================================================================
+   editor.css — Premium Chromium-style Monaco editor panel for Kovix Layout B.
+   ========================================================================== */
+
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  padding: 2px 12px;
+  background: #0d1117;
+  border-bottom: 1px solid #161b22;
+  flex-shrink: 0;
+  min-height: 26px;
+}
+
+.editor-file-path {
+  font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  color: #484f58;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.editor-diff-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(124, 131, 255, 0.12);
+  color: #7c83ff;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.editor-actions button {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.btn-editor-accept {
+  background: #238636;
+  color: #fff;
+}
+
+.btn-editor-accept:hover {
+  background: #2ea043;
+}
+
+.btn-editor-reject {
+  background: #da3633;
+  color: #fff;
+}
+
+.btn-editor-reject:hover {
+  background: #f85149;
+}
+
+.editor-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+.editor-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #484f58;
+  font-size: 16px;
+  gap: 12px;
+}
+
+.editor-empty-icon {
+  font-size: 48px;
+  opacity: 0.15;
+}
+
+.editor-empty-hint {
+  font-size: 12px;
+  color: #484f58;
+}
+
+/* Override Monaco to match our deep dark theme */
+.editor-container .monaco-editor,
+.editor-container .monaco-editor .margin,
+.editor-container .monaco-editor-background {
+  background-color: #0d1117 !important;
+}
+
+.editor-container .monaco-editor .line {
+  background-color: transparent !important;
+}

@@ -24,6 +24,15 @@ import {
 } from '../types/llm';
 import { AnthropicProvider } from './providers/anthropicProvider';
 import { NvidiaProvider } from './providers/nvidiaProvider';
+import { OpenRouterProvider } from './providers/openrouterProvider';
+import { OpenAIProvider } from './providers/openaiProvider';
+import { OllamaProvider } from './providers/ollamaProvider';
+import { DeepSeekProvider } from './providers/deepseekProvider';
+import { GroqProvider } from './providers/groqProvider';
+import { MistralProvider } from './providers/mistralProvider';
+import { GeminiProvider } from './providers/geminiProvider';
+import { TogetherProvider } from './providers/togetherProvider';
+import { LmStudioProvider } from './providers/lmStudioProvider';
 import { getAppState } from '../platform/appState';
 
 // ---------------------------------------------------------------------------
@@ -106,6 +115,123 @@ export class ConstructAIService implements IConstructAIService, Disposable {
                 });
                 nvidia.onDidChangeStatus(s => {
                         logger.verbose(`[ConstructAIService] nvidia-nim status → ${s}`);
+                });
+
+                // Register OpenRouter provider.
+                const openrouter = new OpenRouterProvider(secrets);
+                this._providers.set('openrouter', openrouter);
+
+                openrouter.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === openrouter) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                openrouter.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] openrouter status → ${s}`);
+                });
+
+                // Register OpenAI provider.
+                const openai = new OpenAIProvider(secrets);
+                this._providers.set('openai', openai);
+
+                openai.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === openai) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                openai.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] openai status → ${s}`);
+                });
+
+                // Register Ollama (local) provider.
+                const ollama = new OllamaProvider(secrets);
+                this._providers.set('ollama', ollama);
+
+                ollama.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === ollama) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                ollama.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] ollama status → ${s}`);
+                });
+
+                // Register DeepSeek provider.
+                const deepseek = new DeepSeekProvider(secrets);
+                this._providers.set('deepseek', deepseek);
+
+                deepseek.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === deepseek) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                deepseek.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] deepseek status → ${s}`);
+                });
+
+                // Register Groq provider.
+                const groq = new GroqProvider(secrets);
+                this._providers.set('groq', groq);
+
+                groq.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === groq) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                groq.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] groq status → ${s}`);
+                });
+
+                // Register Mistral provider.
+                const mistral = new MistralProvider(secrets);
+                this._providers.set('mistral', mistral);
+
+                mistral.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === mistral) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                mistral.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] mistral status → ${s}`);
+                });
+
+                // Register Gemini provider.
+                const gemini = new GeminiProvider(secrets);
+                this._providers.set('gemini', gemini);
+
+                gemini.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === gemini) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                gemini.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] gemini status → ${s}`);
+                });
+
+                // Register Together AI provider.
+                const together = new TogetherProvider(secrets);
+                this._providers.set('together', together);
+
+                together.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === together) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                together.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] together status → ${s}`);
+                });
+
+                // Register LM Studio (local) provider.
+                const lmstudio = new LmStudioProvider(secrets);
+                this._providers.set('lm-studio', lmstudio);
+
+                lmstudio.onDidChangeActiveModel(m => {
+                        if (this._activeProvider === lmstudio) {
+                                this._onDidChangeActiveModel.fire(m);
+                        }
+                });
+                lmstudio.onDidChangeStatus(s => {
+                        logger.verbose(`[ConstructAIService] lm-studio status → ${s}`);
                 });
 
                 // Pick the active provider from config (default: anthropic).

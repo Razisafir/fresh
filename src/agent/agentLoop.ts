@@ -87,6 +87,7 @@
  */
 
 import { logger } from '../util/logger';
+import { getCreditSystem } from '../swarm/costGovernor';
 import {
         IAgentLoop,
         AgentLoopEvent,
@@ -199,7 +200,31 @@ export class AgentLoopService implements IAgentLoop {
         readonly onDidMilestonePause = this._onDidMilestonePause.event;
 
         constructor(private readonly deps: IAgentLoopDeps) {
-                logger.info('[AgentLoop] Service created (v0.1: 5 deps, no MCP/memory/snapshot/watcher/recovery/cost-governor).');
+                logger.info('[AgentLoop] Service created (5 deps + credit system).');
+        }
+
+        /**
+         * Consume credits for an LLM call. Returns false if credits are
+         * exhausted (emergency stop). Each LLM call costs 1 credit base
+         * + 1 credit per ~1000 tokens in the response.
+         */
+        private _consumeCreditsForLLMCall(responseText?: string): boolean {
+                const cs = getCreditSystem();
+                if (!cs.isEnabled()) return true;
+
+                const baseCost = 1;
+                const tokenCost = responseText ? Math.ceil(responseText.length / 1000) : 0;
+                const totalCost = baseCost + tokenCost;
+
+                const ok = cs.consumeCredits(totalCost, 'llm_call', {
+                        agentType: 'agent-loop',
+                        description: `LLM call (${responseText?.length ?? 0} chars)`,
+                });
+
+                if (!ok) {
+                        logger.warn('[AgentLoop] Credit budget exhausted — stopping agent loop.');
+                }
+                return ok;
         }
 
         // ----------------------------------------------------------------------
@@ -379,6 +404,11 @@ export class AgentLoopService implements IAgentLoop {
                                 }
 
                                 clearTimeout(timeoutId);
+
+                                // Consume credits for this LLM call
+                                if (!this._consumeCreditsForLLMCall(fullResponse)) {
+                                        return { steps: [], summary: 'Credit budget exhausted', rawResponse: fullResponse };
+                                }
 
                                 // If there were tool calls, add assistant + tool result messages and continue.
                                 // Both Anthropic ('tool_use') and OpenAI/NVIDIA ('tool_calls') stop reasons.
@@ -571,6 +601,13 @@ export class AgentLoopService implements IAgentLoop {
 
                                 clearTimeout(timeoutId);
 
+                                // Consume credits for this LLM call
+                                if (!this._consumeCreditsForLLMCall(currentText)) {
+                                        yield { type: 'error', text: 'Credit budget exhausted. Add credits or reset to continue.', recoverable: false };
+                                        this._isRunning = false;
+                                        return;
+                                }
+
                                 if (hasToolCalls && toolResults.length > 0) {
                                         conversationMessages.push({
                                                 role: 'assistant',
@@ -740,6 +777,13 @@ export class AgentLoopService implements IAgentLoop {
                                 }
 
                                 clearTimeout(timeoutId);
+
+                                // Consume credits for this LLM call
+                                if (!this._consumeCreditsForLLMCall(currentText)) {
+                                        yield { type: 'error', text: 'Credit budget exhausted. Add credits or reset to continue.', recoverable: false };
+                                        this._isRunning = false;
+                                        return;
+                                }
 
                                 if (hasToolCalls && toolResults.length > 0) {
                                         conversationMessages.push({
@@ -921,6 +965,13 @@ export class AgentLoopService implements IAgentLoop {
                                         }
 
                                         clearTimeout(timeoutId);
+
+                                        // Consume credits for this LLM call
+                                        if (!this._consumeCreditsForLLMCall(currentText)) {
+                                                yield { type: 'error', text: 'Credit budget exhausted. Add credits or reset to continue.', recoverable: false };
+                                                this._isRunning = false;
+                                                return;
+                                        }
 
                                         if (hasToolCalls && toolResults.length > 0) {
                                                 conversationMessages.push({
