@@ -109,7 +109,10 @@ import { ITool, IConstructToolRegistry } from '../types/tools';
 import { IPendingChangesService } from '../diff/pendingChanges';
 import { IWorkspaceRootsProvider } from '../security/workspaceGuard';
 import { getMemoryService } from '../memory/memoryService';
+import { getCogneeService } from '../memory/cogneeIntegration';
+import { getSkillRegistry } from '../skills';
 import { buildSystemPrompt, buildChatSystemPrompt } from './promptBuilder';
+import { buildSkillPromptSection, formatCogneeRecallContext } from './skillAwarePromptBuilder';
 import { executeMilestonesWithPauses } from './milestoneExecutor';
 import { runVerification, detectVerificationCommand } from './verification';
 
@@ -244,6 +247,58 @@ export class AgentLoopService implements IAgentLoop {
         }
 
         // ----------------------------------------------------------------------
+        // Role-based skill activation
+        // ----------------------------------------------------------------------
+
+        /**
+         * Handle a role change by activating/deactivating skills that match
+         * the new role. Skills whose allowedRoles includes the new role are
+         * activated; skills that don't match are deactivated.
+         *
+         * This is called from the IPC handler when the user switches roles
+         * (agent:setRole). It gracefully handles missing SkillRegistry or
+         * individual skill activation failures.
+         *
+         * @param newRole The new agent role string (e.g. "general", "coder").
+         * @param context Skill activation context (tool registry, config, etc.).
+         */
+        async setRole(newRole: string, context?: import('../types/skills').ISkillContext): Promise<void> {
+                const skillRegistry = getSkillRegistry();
+                if (!skillRegistry) {
+                        logger.verbose('[AgentLoop] SkillRegistry not available — skipping role-based skill activation.');
+                        return;
+                }
+
+                const allSkills = skillRegistry.listSkills();
+                for (const skill of allSkills) {
+                        const allowed = skill.manifest.allowedRoles;
+                        const matchesRole = !allowed || allowed.length === 0 || allowed.includes(newRole);
+
+                        if (matchesRole && skill.state !== 'active' && context) {
+                                try {
+                                        await skillRegistry.activateSkill(skill.manifest.id, context);
+                                } catch (err) {
+                                        logger.warn(
+                                                `[AgentLoop] Failed to activate skill "${skill.manifest.id}" for role "${newRole}": ` +
+                                                `${err instanceof Error ? err.message : String(err)}`,
+                                        );
+                                }
+                        } else if (!matchesRole && skill.isActive) {
+                                try {
+                                        await skillRegistry.deactivateSkill(skill.manifest.id);
+                                } catch (err) {
+                                        logger.warn(
+                                                `[AgentLoop] Failed to deactivate skill "${skill.manifest.id}" for role "${newRole}": ` +
+                                                `${err instanceof Error ? err.message : String(err)}`,
+                                        );
+                                }
+                        }
+                }
+
+                logger.info(`[AgentLoop] Role set to "${newRole}" — skills updated.`);
+        }
+
+        // ----------------------------------------------------------------------
         // Conversation history (F-003 multi-turn fix)
         // ----------------------------------------------------------------------
 
@@ -317,11 +372,45 @@ export class AgentLoopService implements IAgentLoop {
                                 // Never let memory failure break the agent loop.
                         }
 
+                        // Cognee knowledge graph recall: supplement memory with
+                        // structured knowledge from the Cognee graph. Falls back
+                        // gracefully if Cognee is unavailable.
+                        let cogneeContext = '';
+                        try {
+                                const cogneeSvc = getCogneeService();
+                                if (cogneeSvc.isAvailable()) {
+                                        const cogneeResults = await cogneeSvc.recall(task);
+                                        cogneeContext = formatCogneeRecallContext(cogneeResults);
+                                }
+                        } catch {
+                                // Never let Cognee failure break the agent loop.
+                        }
+
+                        // Build skill system prompt section from active skills.
+                        let skillContext = '';
+                        try {
+                                const skillRegistry = getSkillRegistry();
+                                if (skillRegistry) {
+                                        const role = 'general'; // Default role for planning phase
+                                        skillContext = buildSkillPromptSection({
+                                                activeSkills: skillRegistry.getActiveSkills(),
+                                                availableToolNames: this.deps.toolRegistry.listTools().map(t => t.name),
+                                                role,
+                                        });
+                                }
+                        } catch {
+                                // Skill context is optional — never break the loop.
+                        }
+
+                        // Merge all context sources into extraContext.
+                        const contextParts = [skillContext, memoryContext, cogneeContext].filter(c => c.trim().length > 0);
+                        const mergedContext = contextParts.length > 0 ? contextParts.join('\n\n') : undefined;
+
                         const systemPrompt = buildSystemPrompt({
                                 task,
                                 planningOnly: true,
                                 workspacePath,
-                                extraContext: memoryContext || undefined,
+                                extraContext: mergedContext,
                         });
 
                 // F-003 multi-turn fix: prepend prior conversation context.
@@ -495,7 +584,57 @@ export class AgentLoopService implements IAgentLoop {
 
                 try {
                         const workspacePath = this.deps.workspaceRoots.getWorkspaceRoots()[0] ?? '.';
-                        const systemPrompt = buildChatSystemPrompt({ workspacePath });
+
+                        // Memory retrieval for chat mode: inject relevant memories
+                        // and Cognee knowledge graph results into the chat prompt.
+                        let chatExtraContext = '';
+                        try {
+                                const memoryResult = await getMemoryService().retrieve(text, 3);
+                                if (memoryResult) {
+                                        chatExtraContext += memoryResult;
+                                }
+                        } catch {
+                                // Never let memory failure break the chat loop.
+                        }
+
+                        try {
+                                const cogneeSvc = getCogneeService();
+                                if (cogneeSvc.isAvailable()) {
+                                        const cogneeResults = await cogneeSvc.recall(text);
+                                        const cogneeContext = formatCogneeRecallContext(cogneeResults);
+                                        if (cogneeContext) {
+                                                chatExtraContext = chatExtraContext
+                                                        ? chatExtraContext + '\n\n' + cogneeContext
+                                                        : cogneeContext;
+                                        }
+                                }
+                        } catch {
+                                // Never let Cognee failure break the chat loop.
+                        }
+
+                        // Build skill system prompt section from active skills.
+                        try {
+                                const skillRegistry = getSkillRegistry();
+                                if (skillRegistry) {
+                                        const skillContext = buildSkillPromptSection({
+                                                activeSkills: skillRegistry.getActiveSkills(),
+                                                availableToolNames: this.deps.toolRegistry.listTools().map(t => t.name),
+                                                role: 'general',
+                                        });
+                                        if (skillContext) {
+                                                chatExtraContext = chatExtraContext
+                                                        ? chatExtraContext + '\n\n' + skillContext
+                                                        : skillContext;
+                                        }
+                                }
+                        } catch {
+                                // Skill context is optional — never break the loop.
+                        }
+
+                        const systemPrompt = buildChatSystemPrompt({
+                                workspacePath,
+                                extraContext: chatExtraContext || undefined,
+                        });
 
                         // F-003 multi-turn: prepend prior conversation context.
                         const conversationMessages: IChatMessage[] = [

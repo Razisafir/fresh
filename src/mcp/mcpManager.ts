@@ -3,23 +3,41 @@
  *
  * Phase 0 pivot (D-015): replaced vscode imports with platform equivalents.
  *   - vscode.workspace.getConfiguration → getAppState().config
+ *
+ * SSE transport addition: supports both stdio (local child process) and
+ * SSE (remote HTTP/SSE) MCP server connections. The `transport` field on
+ * each server config determines which client implementation to use.
  */
 
 import { McpClient } from './mcpClient';
+import { McpSseClient } from './mcpSseClient';
 import { sanitise as sanitiseForLlm } from '../security/promptSanitiser';
 import { redactSecrets } from '../security/secretPatterns';
 import { validateToolName } from '../security/workspaceGuard';
 import { logger } from '../util/logger';
 import type { IConstructToolRegistry, ITool, ToolExecuteFn, IToolResult } from '../types/tools';
-import type { IMcpServerConfig, IMcpToolDefinition } from './types';
+import type { IMcpServerConfig, IMcpToolDefinition, IMcpCallResult } from './types';
+import type { IMcpSseServerConfig } from './mcpSseTypes';
 import { getAppState } from '../platform/appState';
 
 const MCP_TOOL_CATEGORY = 'mcp' as const;
 const MCP_TOOL_PREFIX = '__';
 
+/**
+ * Common interface shared by both stdio and SSE MCP client implementations.
+ * Both McpClient and McpSseClient satisfy this interface.
+ */
+interface IMcpClient {
+        connect(): Promise<void>;
+        disconnect(): Promise<void>;
+        listTools(): Promise<IMcpToolDefinition[]>;
+        callTool(name: string, args: Record<string, unknown>, timeoutMs?: number): Promise<IMcpCallResult>;
+        readonly connected: boolean;
+}
+
 export class McpManager {
         private readonly registry: IConstructToolRegistry;
-        private readonly clients = new Map<string, McpClient>();
+        private readonly clients = new Map<string, IMcpClient>();
         private readonly registeredToolNames: string[] = [];
 
         constructor(registry: IConstructToolRegistry) {
@@ -71,7 +89,20 @@ export class McpManager {
         }
 
         private async connectServer(config: IMcpServerConfig): Promise<void> {
-                logger.info(`[MCP ${config.name}] Connecting: ${config.command} ${(config.args ?? []).join(' ')}`);
+                const transport = config.transport ?? 'stdio';
+
+                if (transport === 'sse') {
+                        await this.connectSseServer(config);
+                } else {
+                        await this.connectStdioServer(config);
+                }
+        }
+
+        private async connectStdioServer(config: IMcpServerConfig): Promise<void> {
+                if (!config.command) {
+                        throw new Error(`MCP server ${config.name} is configured as stdio but has no command`);
+                }
+                logger.info(`[MCP ${config.name}] Connecting (stdio): ${config.command} ${(config.args ?? []).join(' ')}`);
 
                 const client = new McpClient(config);
                 await client.connect();
@@ -85,7 +116,35 @@ export class McpManager {
                 }
         }
 
-        private registerMcpTool(serverName: string, tool: IMcpToolDefinition, client: McpClient): void {
+        private async connectSseServer(config: IMcpServerConfig): Promise<void> {
+                if (!config.url) {
+                        throw new Error(`MCP server ${config.name} is configured as SSE but has no url`);
+                }
+                logger.info(`[MCP ${config.name}] Connecting (SSE): ${config.url}`);
+
+                const sseConfig: IMcpSseServerConfig = {
+                        ...config,
+                        transport: 'sse',
+                        url: config.url,
+                        headers: config.headers,
+                        reconnect: config.reconnect,
+                        maxReconnectAttempts: config.maxReconnectAttempts,
+                        reconnectBaseDelayMs: config.reconnectBaseDelayMs,
+                };
+
+                const client = new McpSseClient(sseConfig);
+                await client.connect();
+                this.clients.set(config.name, client);
+
+                const tools = await client.listTools();
+                logger.info(`[MCP ${config.name}] Discovered ${tools.length} tools`);
+
+                for (const tool of tools) {
+                        this.registerMcpTool(config.name, tool, client);
+                }
+        }
+
+        private registerMcpTool(serverName: string, tool: IMcpToolDefinition, client: IMcpClient): void {
                 const fullToolName = `${serverName}${MCP_TOOL_PREFIX}${tool.name}`;
 
                 // SEC-4: Validate MCP tool name against allowed pattern.
@@ -120,7 +179,7 @@ export class McpManager {
         }
 
         private async executeMcpTool(
-                client: McpClient,
+                client: IMcpClient,
                 serverName: string,
                 toolName: string,
                 input: Record<string, unknown>,
@@ -178,6 +237,14 @@ export class McpManager {
         private readConfig(): IMcpServerConfig[] {
                 const raw = getAppState().config.mcpServers;
                 if (!Array.isArray(raw)) return [];
-                return raw.filter((c) => c && typeof c.name === 'string' && typeof c.command === 'string');
+
+                return raw.filter((c) => {
+                        if (!c || typeof c.name !== 'string') return false;
+                        const transport = c.transport ?? 'stdio';
+                        if (transport === 'sse') {
+                                return typeof c.url === 'string';
+                        }
+                        return typeof c.command === 'string';
+                }) as IMcpServerConfig[];
         }
 }
