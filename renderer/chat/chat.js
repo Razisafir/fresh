@@ -225,22 +225,6 @@ function escapeHtml(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function getSecretKeyForProvider(providerType) {
-  switch (providerType) {
-    case 'nvidia-nim': return 'kovix.apiKey.nvidia-nim';
-    case 'openrouter': return 'kovix.apiKey.openrouter';
-    default: return 'kovix.apiKey.anthropic';
-  }
-}
-
-function getProviderDisplayName(providerType) {
-  switch (providerType) {
-    case 'nvidia-nim': return 'NVIDIA NIM';
-    case 'openrouter': return 'OpenRouter';
-    default: return 'Anthropic';
-  }
-}
-
 
 // ---- Swarm UI helpers ----
 
