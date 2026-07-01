@@ -35,6 +35,14 @@ const DEFAULT_CONFIG: IAppConfig = {
         securityAllowExternalTargets: false,
         debugVerbose: false,
         agentRole: 'general',
+        uiMode: 'ide',
+        cogneeEnabled: false,
+        cogneePythonPath: 'python3',
+        cogneeGraphDb: 'kuzu',
+        cogneeEmbedProvider: 'ollama',
+        skillDirectories: [],
+        skillAutoDiscover: true,
+        skillAutoActivate: true,
 };
 
 // ---------------------------------------------------------------------------
@@ -182,6 +190,22 @@ class FileConfig implements IAppConfig {
         set debugVerbose(v: boolean) { this._data.debugVerbose = v; }
         get agentRole(): string { return this._data.agentRole; }
         set agentRole(v: string) { this._data.agentRole = v; }
+        get uiMode(): IAppConfig['uiMode'] { return this._data.uiMode; }
+        set uiMode(v: IAppConfig['uiMode']) { this._data.uiMode = v; }
+        get cogneeEnabled(): boolean { return this._data.cogneeEnabled; }
+        set cogneeEnabled(v: boolean) { this._data.cogneeEnabled = v; }
+        get cogneePythonPath(): string { return this._data.cogneePythonPath; }
+        set cogneePythonPath(v: string) { this._data.cogneePythonPath = v; }
+        get cogneeGraphDb(): IAppConfig['cogneeGraphDb'] { return this._data.cogneeGraphDb; }
+        set cogneeGraphDb(v: IAppConfig['cogneeGraphDb']) { this._data.cogneeGraphDb = v; }
+        get cogneeEmbedProvider(): IAppConfig['cogneeEmbedProvider'] { return this._data.cogneeEmbedProvider; }
+        set cogneeEmbedProvider(v: IAppConfig['cogneeEmbedProvider']) { this._data.cogneeEmbedProvider = v; }
+        get skillDirectories(): string[] { return this._data.skillDirectories; }
+        set skillDirectories(v: string[]) { this._data.skillDirectories = v; }
+        get skillAutoDiscover(): boolean { return this._data.skillAutoDiscover; }
+        set skillAutoDiscover(v: boolean) { this._data.skillAutoDiscover = v; }
+        get skillAutoActivate(): boolean { return this._data.skillAutoActivate; }
+        set skillAutoActivate(v: boolean) { this._data.skillAutoActivate = v; }
 
         async load(): Promise<void> {
                 try {
