@@ -56,6 +56,10 @@ export class McpClient {
 
         /** Spawn the server process and perform the initialize handshake. */
         async connect(): Promise<void> {
+                if (!this.config.command) {
+                        throw new Error(`MCP server ${this.config.name} requires a command for stdio transport`);
+                }
+
                 const { env, strippedKeys } = buildChildEnv(this.config.env);
                 if (strippedKeys.length > 0) {
                         logger.verbose(`[MCP ${this.config.name}] Stripped env keys: ${strippedKeys.join(', ')}`);
