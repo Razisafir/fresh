@@ -50,11 +50,17 @@ export type CreditActionType =
  */
 export interface ICreditSystem {
         getCreditsRemaining(): number;
+        getCreditsUsed(): number;
         consumeCredits(
                 amount: number,
                 actionType: CreditActionType,
                 metadata?: { agentType?: string; sessionId?: string | undefined; description?: string },
         ): boolean;
+        canAfford(amount: number): boolean;
+        setBudget(budget: unknown): void;
+        getBudget(): unknown;
+        getUsageHistory(limit?: number): unknown[];
+        resetSession(): void;
 }
 
 /**
@@ -65,6 +71,7 @@ export interface ICostGovernor {
         isEmergencyMode(): boolean;
         shouldAutoSwitchModel(): boolean;
         getCheaperModel(currentModel: string): string | undefined;
+        isActionAllowed(actionType: CreditActionType): boolean;
 }
 
 // ---------------------------------------------------------------------------

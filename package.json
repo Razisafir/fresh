@@ -1,6 +1,6 @@
 {
   "name": "kovix",
-  "description": "AI-native development environment with Plan→Approve→Execute→Verify agent loop, multi-provider LLM, MCP servers, and semantic memory.",
+  "description": "AI-native development environment with Plan\u2192Approve\u2192Execute\u2192Verify agent loop, multi-provider LLM, MCP servers, and semantic memory.",
   "version": "0.1.0-alpha",
   "license": "MIT",
   "repository": {
@@ -42,7 +42,8 @@
   },
   "overrides": {
     "serialize-javascript": "^7.0.6",
-    "diff": "^9.0.0"
+    "diff": "^9.0.0",
+    "dompurify": "^3.4.11"
   },
   "dependencies": {
     "monaco-editor": "^0.55.1"
@@ -54,7 +55,9 @@
     "appId": "com.kovix.desktop",
     "productName": "Kovix",
     "asar": true,
-    "asarUnpack": ["**/*.node"],
+    "asarUnpack": [
+      "**/*.node"
+    ],
     "directories": {
       "output": "release"
     },
