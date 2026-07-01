@@ -1107,7 +1107,7 @@ export class AgentLoopService implements IAgentLoop {
                         if (/\b(create|write|add|new file|generate)\b/i.test(lower)) {
                                 action = 'Create';
                                 // Try to extract a filename from the response
-                                const fileMatch = lower.match(/(?:called|named|write\s+to|create)\s+[`"']?([\w.\-]+\.?\w*)[`"']?/i);
+                                const fileMatch = lower.match(/(?:called|named|write\s+to|create)\s+[`"']?([\w.-]+\.?\w*)[`"']?/i);
                                 target = fileMatch ? fileMatch[1] : 'new files';
                         } else if (/\b(edit|modify|update|change|fix|patch)\b/i.test(lower)) {
                                 action = 'Edit';

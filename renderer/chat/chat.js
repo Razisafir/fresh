@@ -596,7 +596,7 @@ btnAcceptAll.addEventListener('click', async () => {
   try {
     const snapshot = await api.getPendingSnapshot();
     showPendingBar(Array.isArray(snapshot) ? snapshot.length : 0);
-  } catch (e) {
+  } catch (_e) {
     showPendingBar(0);
   }
 });
@@ -612,7 +612,7 @@ btnRejectAll.addEventListener('click', async () => {
   try {
     const snapshot = await api.getPendingSnapshot();
     showPendingBar(Array.isArray(snapshot) ? snapshot.length : 0);
-  } catch (e) {
+  } catch (_e) {
     showPendingBar(0);
   }
 });

@@ -33,6 +33,11 @@ const supportsFlag = (major > 22) || (major === 22 && minor >= 6);
 const mochaArgs = process.argv.slice(2);
 
 const env = { ...process.env };
+
+// Tell ts-node to use tsconfig.test.json (which has typeRoots pointing
+// to test/_setup so the vscode shim type declarations are found at runtime).
+env.TS_NODE_PROJECT = 'tsconfig.test.json';
+
 if (supportsFlag) {
   // Append to any pre-existing NODE_OPTIONS rather than clobbering it.
   env.NODE_OPTIONS = [env.NODE_OPTIONS, '--no-experimental-strip-types']
