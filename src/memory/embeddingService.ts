@@ -279,6 +279,126 @@ export class NullEmbeddingService implements IEmbeddingService {
 }
 
 // ---------------------------------------------------------------------------
+// OpenAIEmbeddingService (new in v0.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * OpenAI embedding service.
+ *
+ * Calls `POST https://api.openai.com/v1/embeddings` with the configured model.
+ * Uses the same H-1 status tracking as OllamaEmbeddingService.
+ */
+export class OpenAIEmbeddingService implements IEmbeddingService {
+        private readonly apiKey: string;
+        private readonly model: string;
+        private readonly baseUrl: string;
+        private _dimension: number | null = null;
+        private _consecutiveFailures = 0;
+        private _lastFailureReason = '';
+
+        constructor(config: IMemoryConfig, apiKey: string) {
+                this.apiKey = apiKey;
+                this.model = config.embedModel || 'text-embedding-3-small';
+                this.baseUrl = (config.openaiBaseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '');
+        }
+
+        isEnabled(): boolean {
+                return this.getStatus().status !== 'unavailable';
+        }
+
+        getStatus(): IStatusDetail {
+                if (this._consecutiveFailures === 0) {
+                        return {
+                                status: 'available',
+                                reason: `OpenAI embedding service available (${this.baseUrl}, model: ${this.model})`,
+                        };
+                }
+                if (this._consecutiveFailures >= UNAVAILABLE_THRESHOLD) {
+                        return {
+                                status: 'unavailable',
+                                reason: `OpenAI embedding backend failed ${this._consecutiveFailures} consecutive times. ` +
+                                        `Last failure: ${this._lastFailureReason}. ` +
+                                        `Check your API key and network connectivity.`,
+                        };
+                }
+                return {
+                        status: 'degraded',
+                        reason: `OpenAI embedding backend degraded (${this._consecutiveFailures} consecutive failures). ` +
+                                `Last failure: ${this._lastFailureReason}. Retries will continue.`,
+                };
+        }
+
+        async embed(text: string): Promise<EmbeddingResult> {
+                try {
+                        const response = await fetch(`${this.baseUrl}/embeddings`, {
+                                method: 'POST',
+                                headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${this.apiKey}`,
+                                },
+                                body: JSON.stringify({
+                                        model: this.model,
+                                        input: text,
+                                }),
+                                signal: AbortSignal.timeout(15_000),
+                        });
+
+                        if (!response.ok) {
+                                const errText = await response.text().catch(() => '');
+                                this._recordFailure(`HTTP ${response.status}: ${errText.slice(0, 200)}`);
+                                return null;
+                        }
+
+                        const data = await response.json() as {
+                                data?: Array<{ embedding?: number[] }>;
+                        };
+
+                        if (!data.data?.[0]?.embedding || !Array.isArray(data.data[0].embedding) || data.data[0].embedding.length === 0) {
+                                this._recordFailure('Empty or invalid embedding response from OpenAI');
+                                return null;
+                        }
+
+                        // Success — reset failure counter
+                        if (this._consecutiveFailures > 0) {
+                                logger.info(`[EmbeddingService] OpenAI recovered after ${this._consecutiveFailures} consecutive failures. Status → available.`);
+                        }
+                        this._consecutiveFailures = 0;
+                        this._lastFailureReason = '';
+
+                        if (this._dimension === null) {
+                                this._dimension = data.data[0].embedding.length;
+                        }
+
+                        return data.data[0].embedding;
+                } catch (err) {
+                        const msg = err instanceof Error ? err.message : String(err);
+                        this._recordFailure(msg);
+                        return null;
+                }
+        }
+
+        getDimension(): number | null {
+                return this._dimension;
+        }
+
+        private _recordFailure(reason: string): void {
+                this._consecutiveFailures++;
+                this._lastFailureReason = reason;
+
+                if (this._consecutiveFailures === 1) {
+                        logger.warn(`[EmbeddingService] OpenAI embedding failed: ${reason}. Status → degraded.`);
+                } else if (this._consecutiveFailures >= UNAVAILABLE_THRESHOLD) {
+                        logger.error(
+                                `[EmbeddingService] OpenAI embedding UNAVAILABLE after ${this._consecutiveFailures} consecutive failures. ` +
+                                `Last failure: ${reason}.`,
+                        );
+                } else {
+                        logger.warn(`[EmbeddingService] OpenAI embedding failure #${this._consecutiveFailures}: ${reason}`);
+                }
+        }
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
@@ -289,11 +409,33 @@ export function createEmbeddingService(config: IMemoryConfig): IEmbeddingService
         switch (config.embedProvider) {
                 case 'ollama':
                         return new OllamaEmbeddingService(config);
-                case 'openai':
-                        return new NullEmbeddingService(
-                                'OpenAI embedding provider not implemented in v1.0-beta. ' +
-                                'Set kovix.memoryEmbedProvider to "ollama" and start Ollama locally.',
-                        );
+                case 'openai': {
+                        // OpenAI embedding requires an API key. If we can get one from the
+                        // app state secrets, create the real service; otherwise fall back to
+                        // NullEmbeddingService with a clear reason.
+                        try {
+                                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                                const { getAppState } = require('../platform/appState');
+                                const secrets = getAppState().secrets;
+                                // getSecret is async, but the factory is synchronous. We create
+                                // the service optimistically — if the key isn't set, the first
+                                // embed() call will fail and H-1 status tracking kicks in.
+                                const service = new OpenAIEmbeddingService(config, '__pending__');
+                                // Async key resolution: replace the placeholder key on first use
+                                secrets.get('kovix.apiKey.openai').then((key: string | undefined) => {
+                                        if (key) {
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                (service as any).apiKey = key;
+                                        }
+                                }).catch(() => {});
+                                return service;
+                        } catch {
+                                return new NullEmbeddingService(
+                                        'OpenAI embedding provider: could not initialize (secrets unavailable). ' +
+                                        'Set kovix.memoryEmbedProvider to "ollama" and start Ollama locally.',
+                                );
+                        }
+                }
                 case 'none':
                 default:
                         return new NullEmbeddingService();

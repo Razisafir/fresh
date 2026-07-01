@@ -7,6 +7,8 @@
  * State machine: idle → planning → awaiting_approval → executing → complete
  */
 
+/* global DOMPurify */
+
 // ---------------------------------------------------------------------------
 // API handle
 // ---------------------------------------------------------------------------
@@ -51,7 +53,7 @@ let state = 'idle'; // idle | planning | awaiting_approval | executing | swarm_e
 let currentMode = 'chat'; // 'chat' | 'plan' | 'swarm'
 let _currentPlan = null;
 let streamingMessage = null;
-let activeProvider = 'anthropic'; // 'anthropic' | 'nvidia-nim' | 'openrouter'
+let activeProvider = 'anthropic'; // Any AIProviderType value
 
 // ---- Swarm state ----
 let _swarmWorkers = {};      // { agentId: { name, status, steps, filesModified, summary } }
@@ -99,13 +101,21 @@ function renderMarkdown(text) {
     // Numbered lists
     .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
     // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
     // Paragraphs (double newline)
     .replace(/\n\n/g, '</p><p>')
     // Single newlines within paragraphs
     .replace(/\n/g, '<br>');
   // Wrap loose <li> in <ul>
   html = html.replace(/(<li>.*?<\/li>)+/gs, '<ul>$&</ul>');
+  // SECURITY: Sanitize HTML to prevent XSS from LLM output
+  if (typeof DOMPurify !== 'undefined') {
+    html = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'h2', 'h3', 'h4', 'pre', 'code', 'ul', 'li', 'a'],
+      ALLOWED_ATTR: ['href', 'target', 'rel'],
+      ALLOW_DATA_ATTR: false,
+    });
+  }
   return '<p>' + html + '</p>';
 }
 
@@ -224,6 +234,7 @@ function escapeHtml(text) {
   if (!text) return '';
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
 
 // ---- Swarm UI helpers ----
 
@@ -372,7 +383,7 @@ function addSwarmCompletedCard(summary, workerResults) {
   div.className = 'swarm-completed-card';
 
   const succeeded = workerResults.filter(r => r.success).length;
-  const _failed = workerResults.filter(r => !r.success).length;
+  const failed = workerResults.filter(r => !r.success).length;
 
   const resultsHtml = workerResults.map(r => {
     const statusClass = r.success ? 'success' : 'error';
@@ -393,7 +404,7 @@ function addSwarmCompletedCard(summary, workerResults) {
   div.innerHTML = `
     <div class="swarm-partition-header">
       <span class="swarm-icon">&#9881;</span>
-      <h3>Swarm Complete: ${succeeded}/${workerResults.length} succeeded</h3>
+      <h3>Swarm Complete: ${succeeded}/${workerResults.length} succeeded${failed > 0 ? `, ${failed} failed` : ''}</h3>
     </div>
     <div class="swarm-results-list">${resultsHtml}</div>
   `;
@@ -824,23 +835,46 @@ btnRejectAll.addEventListener('click', async () => {
   await api.rejectAllChanges();
 });
 
+// Provider metadata — maps provider type to secret key, display name, and whether a key is required
+const PROVIDER_META = {
+  'anthropic':   { secretKey: 'kovix.apiKey.anthropic',   label: 'Anthropic',     needsKey: true },
+  'nvidia-nim':  { secretKey: 'kovix.apiKey.nvidia-nim',  label: 'NVIDIA NIM',    needsKey: true },
+  'openrouter':  { secretKey: 'kovix.apiKey.openrouter',  label: 'OpenRouter',    needsKey: true },
+  'openai':      { secretKey: 'kovix.apiKey.openai',      label: 'OpenAI',        needsKey: true },
+  'ollama':      { secretKey: null,                        label: 'Ollama (Local)',needsKey: false },
+  'deepseek':    { secretKey: 'kovix.apiKey.deepseek',    label: 'DeepSeek',      needsKey: true },
+  'groq':        { secretKey: 'kovix.apiKey.groq',        label: 'Groq',          needsKey: true },
+  'mistral':     { secretKey: 'kovix.apiKey.mistral',     label: 'Mistral',       needsKey: true },
+  'gemini':      { secretKey: 'kovix.apiKey.gemini',      label: 'Gemini',        needsKey: true },
+  'together':    { secretKey: 'kovix.apiKey.together',    label: 'Together AI',   needsKey: true },
+  'lm-studio':   { secretKey: null,                        label: 'LM Studio',     needsKey: false },
+};
+
+function getProviderMeta(type) {
+  return PROVIDER_META[type] || { secretKey: `kovix.apiKey.${type}`, label: type, needsKey: true };
+}
+
 // API key modal
 btnSaveKey.addEventListener('click', async () => {
   const key = apiKeyInput.value.trim();
   const selectedProvider = apiKeyProvider ? apiKeyProvider.value : 'anthropic';
-  if (key) {
-    const secretKey = selectedProvider === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : selectedProvider === 'openrouter' ? 'kovix.apiKey.openrouter' : 'kovix.apiKey.anthropic';
-    await api.setSecret(secretKey, key);
-    // Switch to this provider
-    const ok = await api.switchProvider(selectedProvider);
-    if (ok) {
-      activeProvider = selectedProvider;
-      if (providerSelect) providerSelect.value = selectedProvider;
-    }
-    apiKeyModal.classList.add('hidden');
-    addMessage('system', `🔑 API key saved for ${selectedProvider === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}.`);
-    await loadModels();
+  const meta = getProviderMeta(selectedProvider);
+  if (meta.needsKey && key) {
+    await api.setSecret(meta.secretKey, key);
+  } else if (!meta.needsKey) {
+    // Local provider — no key needed
+  } else {
+    return; // Key required but not provided
   }
+  // Switch to this provider
+  const ok = await api.switchProvider(selectedProvider);
+  if (ok) {
+    activeProvider = selectedProvider;
+    if (providerSelect) providerSelect.value = selectedProvider;
+  }
+  apiKeyModal.classList.add('hidden');
+  addMessage('system', `🔑 API key saved for ${meta.label}.`);
+  await loadModels();
 });
 
 btnCancelKey.addEventListener('click', () => {
@@ -888,24 +922,26 @@ modelSelect.addEventListener('change', async () => {
 if (providerSelect) {
   providerSelect.addEventListener('change', async () => {
     const providerType = providerSelect.value;
-    const secretKey = providerType === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : providerType === 'openrouter' ? 'kovix.apiKey.openrouter' : 'kovix.apiKey.anthropic';
-    const hasKey = await api.getSecret(secretKey);
-    if (!hasKey) {
-      // No key for this provider — open settings
-      const providerLabel = providerType === 'nvidia-nim' ? 'NVIDIA NIM' : providerType === 'openrouter' ? 'OpenRouter' : 'Anthropic';
-      addMessage('system', `No API key set for ${providerLabel}. Set it in Settings.`);
-      settingsModal.classList.remove('hidden');
-      providerSelect.value = activeProvider;
-      return;
+    const meta = getProviderMeta(providerType);
+
+    if (meta.needsKey) {
+      const hasKey = meta.secretKey ? await api.getSecret(meta.secretKey) : false;
+      if (!hasKey) {
+        // No key for this provider — open settings
+        addMessage('system', `No API key set for ${meta.label}. Set it in Settings.`);
+        settingsModal.classList.remove('hidden');
+        providerSelect.value = activeProvider;
+        return;
+      }
     }
+
     const ok = await api.switchProvider(providerType);
     if (ok) {
       activeProvider = providerType;
-      const providerLabel2 = providerType === 'nvidia-nim' ? 'NVIDIA NIM' : providerType === 'openrouter' ? 'OpenRouter' : 'Anthropic';
-      addMessage('system', `Switched to ${providerLabel2}.`);
+      addMessage('system', `Switched to ${meta.label}.`);
       await loadModels();
     } else {
-      addMessage('system', `Failed to switch to ${providerType}. Check your API key.`);
+      addMessage('system', `Failed to switch to ${meta.label}. Check your API key or server status.`);
       providerSelect.value = activeProvider;
     }
   });
@@ -916,12 +952,27 @@ if (providerSelect) {
 // ---------------------------------------------------------------------------
 
 btnSettings.addEventListener('click', async () => {
-  const anthropicKey = await api.getSecret('kovix.apiKey.anthropic');
-  const nvidiaKey = await api.getSecret('kovix.apiKey.nvidia-nim');
-  const openrouterKey = await api.getSecret('kovix.apiKey.openrouter');
-  settingsAnthropicKey.value = anthropicKey || '';
-  if (settingsNvidiaKey) settingsNvidiaKey.value = nvidiaKey || '';
-  if (settingsOpenRouterKey) settingsOpenRouterKey.value = openrouterKey || '';
+  // Load existing keys into settings fields
+  const keys = await Promise.all([
+    api.getSecret('kovix.apiKey.anthropic'),
+    api.getSecret('kovix.apiKey.nvidia-nim'),
+    api.getSecret('kovix.apiKey.openrouter'),
+    api.getSecret('kovix.apiKey.openai'),
+    api.getSecret('kovix.apiKey.deepseek'),
+    api.getSecret('kovix.apiKey.groq'),
+    api.getSecret('kovix.apiKey.mistral'),
+    api.getSecret('kovix.apiKey.gemini'),
+    api.getSecret('kovix.apiKey.together'),
+  ]);
+  settingsAnthropicKey.value = keys[0] || '';
+  if (settingsNvidiaKey) settingsNvidiaKey.value = keys[1] || '';
+  if (settingsOpenRouterKey) settingsOpenRouterKey.value = keys[2] || '';
+  // New provider key fields
+  const newKeyFields = ['settings-openai-key', 'settings-deepseek-key', 'settings-groq-key', 'settings-mistral-key', 'settings-gemini-key', 'settings-together-key'];
+  for (let i = 0; i < newKeyFields.length; i++) {
+    const el = document.getElementById(newKeyFields[i]);
+    if (el) el.value = keys[3 + i] || '';
+  }
   settingsModal.classList.remove('hidden');
 });
 
@@ -977,17 +1028,58 @@ if (btnSaveOpenRouterKey) {
   });
 }
 
+// Dynamic save handlers for new provider keys
+const newProviderSaveButtons = [
+  { btnId: 'btn-save-openai-key',   inputId: 'settings-openai-key',   secretKey: 'kovix.apiKey.openai',   provider: 'openai',   label: 'OpenAI' },
+  { btnId: 'btn-save-deepseek-key', inputId: 'settings-deepseek-key', secretKey: 'kovix.apiKey.deepseek', provider: 'deepseek', label: 'DeepSeek' },
+  { btnId: 'btn-save-groq-key',     inputId: 'settings-groq-key',    secretKey: 'kovix.apiKey.groq',     provider: 'groq',     label: 'Groq' },
+  { btnId: 'btn-save-mistral-key',  inputId: 'settings-mistral-key', secretKey: 'kovix.apiKey.mistral',  provider: 'mistral',  label: 'Mistral' },
+  { btnId: 'btn-save-gemini-key',   inputId: 'settings-gemini-key',  secretKey: 'kovix.apiKey.gemini',   provider: 'gemini',   label: 'Gemini' },
+  { btnId: 'btn-save-together-key', inputId: 'settings-together-key', secretKey: 'kovix.apiKey.together', provider: 'together', label: 'Together AI' },
+];
+
+for (const { btnId, inputId, secretKey, provider, label } of newProviderSaveButtons) {
+  const btn = document.getElementById(btnId);
+  const input = document.getElementById(inputId);
+  if (btn && input) {
+    btn.addEventListener('click', async () => {
+      const key = input.value.trim();
+      if (key) {
+        await api.setSecret(secretKey, key);
+        addMessage('system', `${label} API key saved. Switching provider…`);
+        settingsModal.classList.add('hidden');
+        const ok = await api.switchProvider(provider);
+        if (ok) {
+          activeProvider = provider;
+          if (providerSelect) providerSelect.value = provider;
+          addMessage('system', `Switched to ${label}.`);
+        }
+        await loadModels();
+      }
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Init: check for API key on startup
 // ---------------------------------------------------------------------------
 
 (async function init() {
   // Check for any API key
-  const anthropicKey = await api.getSecret('kovix.apiKey.anthropic');
-  const nvidiaKey = await api.getSecret('kovix.apiKey.nvidia-nim');
-  const openrouterKey = await api.getSecret('kovix.apiKey.openrouter');
+  const allKeys = await Promise.all([
+    api.getSecret('kovix.apiKey.anthropic'),
+    api.getSecret('kovix.apiKey.nvidia-nim'),
+    api.getSecret('kovix.apiKey.openrouter'),
+    api.getSecret('kovix.apiKey.openai'),
+    api.getSecret('kovix.apiKey.deepseek'),
+    api.getSecret('kovix.apiKey.groq'),
+    api.getSecret('kovix.apiKey.mistral'),
+    api.getSecret('kovix.apiKey.gemini'),
+    api.getSecret('kovix.apiKey.together'),
+  ]);
+  const hasAnyKey = allKeys.some(k => k);
 
-  if (!anthropicKey && !nvidiaKey && !openrouterKey) {
+  if (!hasAnyKey) {
     apiKeyModal.classList.remove('hidden');
   }
 

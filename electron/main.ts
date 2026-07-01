@@ -31,7 +31,7 @@ import { initCostGovernor, getCreditSystem } from '../src/swarm/costGovernor';
 import { getSwarmOrchestrator, resolveSwarmApproval } from '../src/swarm/orchestrator';
 import { getGitService } from '../src/git';
 import { initConversationStore, getConversationStore } from '../src/memory/conversationStore';
-import { initCodebaseIndexer, getCodebaseIndexer, IIndexOptions, ISearchOptions, IContextOptions } from '../src/memory/codebaseIndexer';
+import { initCodebaseIndexer, getCodebaseIndexer } from '../src/memory/codebaseIndexer';
 import { getFileWatcherService } from '../src/platform/fileWatcher';
 import { logger } from '../src/util/logger';
 import type { IApprovedPlan, AgentLoopEvent } from '../src/types/agent';
@@ -48,6 +48,19 @@ let _activeAbortController: AbortController | null = null;
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Global error handlers (production hardening)
+// ---------------------------------------------------------------------------
+
+process.on('uncaughtException', (err: Error) => {
+        logger.error(`[Main] Uncaught exception: ${err.message}\n${err.stack ?? ''}`);
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+        const msg = reason instanceof Error ? `${reason.message}\n${reason.stack ?? ''}` : String(reason);
+        logger.error(`[Main] Unhandled rejection: ${msg}`);
+});
 
 app.whenReady().then(async () => {
         logger.info('Kovix starting up (Electron standalone — Phase 0 pivot, D-015).');
@@ -171,7 +184,7 @@ function createWindow(): void {
                         preload: path.join(__dirname, 'preload.js'),
                         contextIsolation: true,
                         nodeIntegration: false,
-                        sandbox: false,
+                        sandbox: true,
                 },
         });
 
@@ -237,7 +250,15 @@ function registerIpcHandlers(): void {
         });
 
         // ---- Secrets ----
+        ipcMain.handle('secrets:has', async (_event, key: string) => {
+                if (!isAppStateInitialized()) return false;
+                const value = await getAppState().secrets.get(key);
+                return value !== undefined && value !== null && value !== '';
+        });
+
         ipcMain.handle('secrets:get', async (_event, key: string) => {
+                // SECURITY: Only expose secrets to renderer for provider key setup.
+                // Consider migrating to secrets:has + main-process-only usage.
                 if (!isAppStateInitialized()) return undefined;
                 return getAppState().secrets.get(key);
         });
@@ -392,12 +413,95 @@ function registerIpcHandlers(): void {
                         { type: 'openai', displayName: 'OpenAI', activeModel: aiService?.getProvider('openai')?.getActiveModel()?.id ?? '' },
                         { type: 'ollama', displayName: 'Ollama (Local)', activeModel: aiService?.getProvider('ollama')?.getActiveModel()?.id ?? '' },
                         { type: 'deepseek', displayName: 'DeepSeek', activeModel: aiService?.getProvider('deepseek')?.getActiveModel()?.id ?? '' },
+                        { type: 'groq', displayName: 'Groq', activeModel: aiService?.getProvider('groq')?.getActiveModel()?.id ?? '' },
+                        { type: 'mistral', displayName: 'Mistral', activeModel: aiService?.getProvider('mistral')?.getActiveModel()?.id ?? '' },
+                        { type: 'gemini', displayName: 'Gemini', activeModel: aiService?.getProvider('gemini')?.getActiveModel()?.id ?? '' },
+                        { type: 'together', displayName: 'Together AI', activeModel: aiService?.getProvider('together')?.getActiveModel()?.id ?? '' },
+                        { type: 'lm-studio', displayName: 'LM Studio (Local)', activeModel: aiService?.getProvider('lm-studio')?.getActiveModel()?.id ?? '' },
                 ];
         });
 
         ipcMain.handle('agent:getActiveProvider', async () => {
                 if (!aiService) return 'anthropic';
                 return aiService.activeProviderType ?? 'anthropic';
+        });
+
+        // ---- Agent roles ----
+        ipcMain.handle('agent:listRoles', async () => {
+                const { AGENT_ROLE_CONFIGS } = require('../src/agent/agentRoles') as typeof import('../src/agent/agentRoles');
+                return Object.values(AGENT_ROLE_CONFIGS).map(cfg => ({
+                        role: cfg.role,
+                        label: cfg.label,
+                        description: cfg.description,
+                        icon: cfg.icon,
+                        color: cfg.color,
+                        defaultExecutionMode: cfg.defaultExecutionMode,
+                }));
+        });
+
+        ipcMain.handle('agent:setRole', async (_event: Electron.IpcMainInvokeEvent, role: string) => {
+                if (!isAppStateInitialized()) return false;
+                const { AgentRole } = require('../src/agent/agentRoles') as typeof import('../src/agent/agentRoles');
+                const validRoles = new Set<string>(Object.values(AgentRole));
+                if (!validRoles.has(role)) return false;
+                getAppState().config.agentRole = role;
+                await getAppState().config.save();
+                return true;
+        });
+
+        ipcMain.handle('agent:getRole', async () => {
+                if (!isAppStateInitialized()) return 'general';
+                return getAppState().config.agentRole || 'general';
+        });
+
+        // ---- Agent slash commands ----
+        ipcMain.handle('agent:listSlashCommands', async () => {
+                const { BUILTIN_SLASH_COMMANDS } = require('../src/agent/slashCommands') as typeof import('../src/agent/slashCommands');
+                return BUILTIN_SLASH_COMMANDS.map(cmd => ({
+                        name: cmd.name,
+                        description: cmd.description,
+                        usage: cmd.usage,
+                        shortcut: cmd.shortcut ?? null,
+                }));
+        });
+
+        // ---- Telemetry ----
+        ipcMain.handle('telemetry:getUsageLog', async (_event: Electron.IpcMainInvokeEvent, options?: { limit?: number; event?: string }) => {
+                const { getTelemetryService } = require('../src/telemetry/localUsageLog') as typeof import('../src/telemetry/localUsageLog');
+                const { parseTelemetryLine } = require('../src/telemetry/localUsageLogHelpers') as typeof import('../src/telemetry/localUsageLogHelpers');
+                const fsSync = require('fs') as typeof import('fs');
+                const logPath = getTelemetryService().logFilePath;
+                try {
+                        if (!fsSync.existsSync(logPath)) return [];
+                        const raw = fsSync.readFileSync(logPath, 'utf8');
+                        const lines = raw.split('\n').filter(l => l.trim());
+                        let entries = lines.map(l => parseTelemetryLine(l)).filter((e): e is import('../src/telemetry/telemetryTypes').ITelemetryEvent => e !== null);
+                        if (options?.event) {
+                                entries = entries.filter(e => e.event === options.event);
+                        }
+                        if (options?.limit && options.limit > 0) {
+                                entries = entries.slice(-options.limit);
+                        }
+                        return entries;
+                } catch {
+                        return [];
+                }
+        });
+
+        ipcMain.handle('telemetry:getSummary', async () => {
+                const { getTelemetryService } = require('../src/telemetry/localUsageLog') as typeof import('../src/telemetry/localUsageLog');
+                const { parseTelemetryLine, buildSessionSummary } = require('../src/telemetry/localUsageLogHelpers') as typeof import('../src/telemetry/localUsageLogHelpers');
+                const fsSync = require('fs') as typeof import('fs');
+                const logPath = getTelemetryService().logFilePath;
+                try {
+                        if (!fsSync.existsSync(logPath)) return buildSessionSummary([]);
+                        const raw = fsSync.readFileSync(logPath, 'utf8');
+                        const lines = raw.split('\n').filter(l => l.trim());
+                        const entries = lines.map(l => parseTelemetryLine(l)).filter((e): e is import('../src/telemetry/telemetryTypes').ITelemetryEvent => e !== null);
+                        return buildSessionSummary(entries);
+                } catch {
+                        return buildSessionSummary([]);
+                }
         });
 
         // ---- Pending changes ----
@@ -523,6 +627,9 @@ function registerIpcHandlers(): void {
         });
 
         ipcMain.handle('credits:add', async (_event: Electron.IpcMainInvokeEvent, amount: number) => {
+                if (typeof amount !== 'number' || amount <= 0) {
+                        return { error: 'amount must be a positive number' };
+                }
                 getCreditSystem().addCredits(amount);
                 return { success: true };
         });
@@ -561,43 +668,53 @@ function registerIpcHandlers(): void {
         });
 
         ipcMain.handle('git:stage', async (_event, repoPath: string, filePaths: string[]) => {
-                await gitService.stage(repoPath, filePaths);
+                try { await gitService.stage(repoPath, filePaths); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:unstage', async (_event, repoPath: string, filePaths: string[]) => {
-                await gitService.unstage(repoPath, filePaths);
+                try { await gitService.unstage(repoPath, filePaths); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:commit', async (_event, repoPath: string, message: string) => {
-                return await gitService.commit(repoPath, message);
+                try { return await gitService.commit(repoPath, message); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string) => {
-                await gitService.checkout(repoPath, branch);
+                try { await gitService.checkout(repoPath, branch); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:createBranch', async (_event, repoPath: string, name: string, checkout?: boolean) => {
-                await gitService.createBranch(repoPath, name, checkout);
+                try { await gitService.createBranch(repoPath, name, checkout); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:deleteBranch', async (_event, repoPath: string, name: string, force?: boolean) => {
-                await gitService.deleteBranch(repoPath, name, force);
+                try { await gitService.deleteBranch(repoPath, name, force); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:pull', async (_event, repoPath: string, remote?: string, branch?: string) => {
-                return await gitService.pull(repoPath, remote, branch);
+                try { return await gitService.pull(repoPath, remote, branch); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:push', async (_event, repoPath: string, remote?: string, branch?: string) => {
-                await gitService.push(repoPath, remote, branch);
+                try { await gitService.push(repoPath, remote, branch); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:stash', async (_event, repoPath: string, message?: string) => {
-                await gitService.stash(repoPath, message);
+                try { await gitService.stash(repoPath, message); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:stashPop', async (_event, repoPath: string) => {
-                await gitService.stashPop(repoPath);
+                try { await gitService.stashPop(repoPath); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string) => {
@@ -618,36 +735,51 @@ function registerIpcHandlers(): void {
 
         // ---- Conversation store ----
         ipcMain.handle('conversation:list', async () => {
-                return await getConversationStore().listConversations();
+                try { return await getConversationStore().listConversations(); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:load', async (_event, id: string) => {
-                return await getConversationStore().loadConversation(id);
+                try { return await getConversationStore().loadConversation(id); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:create', async (_event, title?: string) => {
-                return await getConversationStore().createConversation(title);
+                try { return await getConversationStore().createConversation(title); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:delete', async (_event, id: string) => {
-                await getConversationStore().deleteConversation(id);
+                try { await getConversationStore().deleteConversation(id); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:getActive', async () => {
-                return await getConversationStore().getActiveConversation();
+                try { return await getConversationStore().getActiveConversation(); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:setActive', async (_event, id: string) => {
-                await getConversationStore().setActiveConversation(id);
+                try { await getConversationStore().setActiveConversation(id); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:addMessage', async (_event, conversationId: string, message: unknown) => {
-                const stored = message as import('../src/memory/conversationStore').IStoredMessage;
-                const chatMsg: import('../src/types/llm').IChatMessage = {
-                        role: stored.role as 'user' | 'assistant' | 'system',
-                        content: stored.content,
-                };
-                await getConversationStore().addMessage(conversationId, chatMsg);
+                try {
+                        const stored = message as Record<string, unknown>;
+                        const validRoles = ['user', 'assistant', 'system'] as const;
+                        const role = validRoles.includes(stored.role as typeof validRoles[number])
+                                ? stored.role as 'user' | 'assistant' | 'system'
+                                : 'user'; // Safe default
+                        const chatMsg: import('../src/types/llm').IChatMessage = {
+                                role,
+                                content: String(stored.content ?? ''),
+                        };
+                        await getConversationStore().addMessage(conversationId, chatMsg);
+                        return { success: true };
+                } catch (e) {
+                        return { error: (e as Error).message };
+                }
         });
 
         // ---- Codebase indexer ----
@@ -658,7 +790,7 @@ function registerIpcHandlers(): void {
         ipcMain.handle('indexer:start', async (_event, rootPath: string, options?: unknown) => {
                 const indexer = getCodebaseIndexer();
                 const results = [];
-                for await (const progress of indexer.indexWorkspace(rootPath, options as IIndexOptions)) {
+                for await (const progress of indexer.indexWorkspace(rootPath, options as Record<string, unknown>)) {
                         sendToRenderer('indexer:progress', progress);
                         results.push(progress);
                 }
@@ -666,11 +798,11 @@ function registerIpcHandlers(): void {
         });
 
         ipcMain.handle('indexer:search', async (_event, query: string, options?: unknown) => {
-                return await getCodebaseIndexer().search(query, options as ISearchOptions);
+                return await getCodebaseIndexer().search(query, options as Record<string, unknown>);
         });
 
         ipcMain.handle('indexer:fileContext', async (_event, filePath: string, options?: unknown) => {
-                return await getCodebaseIndexer().getFileContext(filePath, options as IContextOptions);
+                return await getCodebaseIndexer().getFileContext(filePath, options as Record<string, unknown>);
         });
 
         // ---- File watcher ----

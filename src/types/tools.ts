@@ -38,13 +38,13 @@
  * Uses a simplified JSON Schema format compatible with zod validation.
  */
 export interface IToolParameterSchema {
-	type: 'string' | 'number' | 'boolean' | 'object' | 'array';
-	description: string;
-	properties?: Record<string, IToolParameterSchema>;
-	items?: IToolParameterSchema;
-	required?: string[];
-	enum?: string[];
-	default?: unknown;
+        type: 'string' | 'number' | 'boolean' | 'object' | 'array';
+        description: string;
+        properties?: Record<string, IToolParameterSchema>;
+        items?: IToolParameterSchema;
+        required?: string[];
+        enum?: string[];
+        default?: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,22 +67,22 @@ export interface IToolParameterSchema {
  * is preserved so the type doesn't drift if a v1.1+ tool ever needs it.
  */
 export interface ITool {
-	/** Unique name for this tool (e.g., 'read_file', 'run_command'). */
-	name: string;
-	/** Human-readable description of what the tool does. */
-	description: string;
-	/** JSON Schema for the tool's input parameters. */
-	inputSchema: {
-		type: 'object';
-		properties: Record<string, IToolParameterSchema>;
-		required?: string[];
-	};
-	/** Whether this tool modifies files (requires user approval in some autonomy modes). */
-	modifiesFiles: boolean;
-	/** Whether this tool requires network access. */
-	requiresNetwork: boolean;
-	/** Category for UI grouping. */
-	category: 'file' | 'terminal' | 'search' | 'network' | 'system' | 'security' | 'design' | 'behavior' | 'mcp';
+        /** Unique name for this tool (e.g., 'read_file', 'run_command'). */
+        name: string;
+        /** Human-readable description of what the tool does. */
+        description: string;
+        /** JSON Schema for the tool's input parameters. */
+        inputSchema: {
+                type: 'object';
+                properties: Record<string, IToolParameterSchema>;
+                required?: string[];
+        };
+        /** Whether this tool modifies files (requires user approval in some autonomy modes). */
+        modifiesFiles: boolean;
+        /** Whether this tool requires network access. */
+        requiresNetwork: boolean;
+        /** Category for UI grouping. */
+        category: 'file' | 'terminal' | 'search' | 'network' | 'system' | 'security' | 'design' | 'behavior' | 'mcp';
 }
 
 // ---------------------------------------------------------------------------
@@ -93,29 +93,29 @@ export interface ITool {
  * Result of executing a tool.
  */
 export interface IToolResult {
-	/** Whether the execution was successful. */
-	success: boolean;
-	/** The output text (or error message if not successful). */
-	output: string;
-	/** Whether the output is truncated due to size limits. */
-	truncated: boolean;
-	/** Additional metadata about the execution. */
-	metadata?: {
-		/** Duration of execution in milliseconds. */
-		durationMs?: number;
-		/** Number of bytes read/written. */
-		bytesProcessed?: number;
-		/** Exit code for terminal commands. */
-		exitCode?: number;
-		/** Name of the tool that was executed (for MCP/agent-reach tools). */
-		tool?: string;
-		/** Whether the underlying MCP server was configured at execution time. */
-		configured?: boolean;
-		/** Mode the tool was run in (e.g. ponytail 'strict' | 'minimal' | 'review', 'git', 'file', 'kali'). */
-		mode?: string;
-		/** Severity level for findings (e.g. 'critical', 'high', 'low'). */
-		severity?: string;
-	};
+        /** Whether the execution was successful. */
+        success: boolean;
+        /** The output text (or error message if not successful). */
+        output: string;
+        /** Whether the output is truncated due to size limits. */
+        truncated: boolean;
+        /** Additional metadata about the execution. */
+        metadata?: {
+                /** Duration of execution in milliseconds. */
+                durationMs?: number;
+                /** Number of bytes read/written. */
+                bytesProcessed?: number;
+                /** Exit code for terminal commands. */
+                exitCode?: number;
+                /** Name of the tool that was executed (for MCP/agent-reach tools). */
+                tool?: string;
+                /** Whether the underlying MCP server was configured at execution time. */
+                configured?: boolean;
+                /** Mode the tool was run in (e.g. ponytail 'strict' | 'minimal' | 'review', 'git', 'file', 'kali'). */
+                mode?: string;
+                /** Severity level for findings (e.g. 'critical', 'high', 'low'). */
+                severity?: string;
+        };
 }
 
 // ---------------------------------------------------------------------------
@@ -134,8 +134,8 @@ export interface IToolResult {
  * @returns The execution result.
  */
 export type ToolExecuteFn = (
-	input: Record<string, unknown>,
-	signal?: AbortSignal,
+        input: Record<string, unknown>,
+        signal?: AbortSignal,
 ) => Promise<IToolResult>;
 
 // ---------------------------------------------------------------------------
@@ -146,7 +146,7 @@ export type ToolExecuteFn = (
  * IConstructToolRegistry — registry and executor for agent tools.
  *
  * Manages the lifecycle of tools available to the agent, including:
- * - Built-in tools (read_file, write_file, run_command, search_codebase,
+ * - Built-in tools (read_file, write_file, run_command, search_code,
  *   web_fetch, edit_file, list_directory) — 7 tools per v0.1 spec.
  * - MCP tools (dynamically loaded from MCP servers, dispatched as
  *   `serverName__toolName`).
@@ -161,41 +161,41 @@ export type ToolExecuteFn = (
  * (Layer 2, ported in a later Phase 3 round).
  */
 export interface IConstructToolRegistry {
-	/**
-	 * List all registered tools.
-	 */
-	listTools(): ITool[];
+        /**
+         * List all registered tools.
+         */
+        listTools(): ITool[];
 
-	/**
-	 * Get a tool definition by name.
-	 */
-	getTool(name: string): ITool | undefined;
+        /**
+         * Get a tool definition by name.
+         */
+        getTool(name: string): ITool | undefined;
 
-	/**
-	 * Execute a tool by name.
-	 *
-	 * IMPORTANT: If the tool modifies files, the implementation MUST route
-	 * through the pending-changes service (`src/diff/pendingChangesService.ts`)
-	 * so the user can review the diff before it lands on disk. The agent loop
-	 * must never auto-apply file changes silently.
-	 *
-	 * @param name Tool name.
-	 * @param input Tool input parameters.
-	 * @param signal Optional AbortSignal for cancellation.
-	 * @returns The execution result.
-	 */
-	execute(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult>;
+        /**
+         * Execute a tool by name.
+         *
+         * IMPORTANT: If the tool modifies files, the implementation MUST route
+         * through the pending-changes service (`src/diff/pendingChangesService.ts`)
+         * so the user can review the diff before it lands on disk. The agent loop
+         * must never auto-apply file changes silently.
+         *
+         * @param name Tool name.
+         * @param input Tool input parameters.
+         * @param signal Optional AbortSignal for cancellation.
+         * @returns The execution result.
+         */
+        execute(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult>;
 
-	/**
-	 * Register a new tool.
-	 *
-	 * @param tool The tool definition.
-	 * @param executeFn The function to execute when the tool is called.
-	 */
-	registerTool(tool: ITool, executeFn: ToolExecuteFn): void;
+        /**
+         * Register a new tool.
+         *
+         * @param tool The tool definition.
+         * @param executeFn The function to execute when the tool is called.
+         */
+        registerTool(tool: ITool, executeFn: ToolExecuteFn): void;
 
-	/**
-	 * Unregister a tool by name.
-	 */
-	unregisterTool(name: string): void;
+        /**
+         * Unregister a tool by name.
+         */
+        unregisterTool(name: string): void;
 }
