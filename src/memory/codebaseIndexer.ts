@@ -212,7 +212,7 @@ function matchGlob(filePath: string, patterns: string[]): boolean {
 }
 
 function globToRegex(pattern: string): RegExp {
-        let re = pattern
+        const re = pattern
                 .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape regex specials (except * and ?)
                 .replace(/\*\*/g, '{{GLOBSTAR}}')
                 .replace(/\*/g, '[^/]*')
@@ -249,7 +249,7 @@ const PY_FUNCTION_RE = /def\s+([\w]+)/g;
 
 // Go patterns
 const GO_IMPORT_RE = /import\s+(?:\([\s\S]*?\)|"([^"]+)")/g;
-const GO_FUNC_RE = /func\s+(?:\([\w\s\*]+\)\s*)?([\w]+)\s*\(/g;
+const GO_FUNC_RE = /func\s+(?:\([\w\s*]+\)\s*)?([\w]+)\s*\(/g;
 const GO_TYPE_RE = /type\s+([\w]+)\s+(?:struct|interface)/g;
 
 function parseFileContent(content: string, language: string): IParsedFile {

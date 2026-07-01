@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="chat/chat.css">
   <link rel="stylesheet" href="filetree/filetree.css">
   <link rel="stylesheet" href="editor/editor.css">
+  <link rel="stylesheet" href="light-theme.css">
   <style>
     /* ==========================================================================
        Layout B — Premium Chromium-style three-pane layout
@@ -475,6 +476,14 @@
           <option value="anthropic">Anthropic</option>
           <option value="nvidia-nim">NVIDIA NIM</option>
           <option value="openrouter">OpenRouter</option>
+          <option value="openai">OpenAI</option>
+          <option value="ollama">Ollama (Local)</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="groq">Groq</option>
+          <option value="mistral">Mistral</option>
+          <option value="gemini">Gemini</option>
+          <option value="together">Together AI</option>
+          <option value="lm-studio">LM Studio</option>
         </select>
         <select id="model-select" class="toolbar-select" title="Model"><option value="">Loading...</option></select>
       </div>
@@ -486,6 +495,7 @@
         </div>
       </div>
       <div class="toolbar-right">
+        <button class="toolbar-btn" id="btn-theme-toggle" title="Toggle Light/Dark Theme">&#9788;</button>
         <button class="toolbar-btn" id="btn-settings" title="Settings">&#9881;</button>
       </div>
     </div>
@@ -554,7 +564,15 @@
         <select id="api-key-provider" style="width:100%;padding:8px;background:#0d1117;color:#c9d1d9;border:1px solid #21262d;border-radius:6px;font-size:14px;">
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="nvidia-nim">NVIDIA NIM (Free models!)</option>
-          <option value="openrouter">OpenRouter (Multi-model)</option>
+          <option value="openrouter">OpenRouter (Multi-provider)</option>
+          <option value="openai">OpenAI (GPT-4o, o-series)</option>
+          <option value="deepseek">DeepSeek (Coder, Chat)</option>
+          <option value="groq">Groq (Fast inference)</option>
+          <option value="mistral">Mistral (Codestral, etc.)</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="together">Together AI</option>
+          <option value="ollama">Ollama (Local — no key needed)</option>
+          <option value="lm-studio">LM Studio (Local — no key needed)</option>
         </select>
       </div>
       <div class="settings-group">
@@ -588,6 +606,41 @@
         <p style="font-size:11px;color:#8b949e;margin-bottom:4px;">Access Claude, GPT-4o, Gemini, Llama &amp; more via <a href="https://openrouter.ai/keys" style="color:#7c83ff">openrouter.ai</a></p>
         <input id="settings-openrouter-key" type="password" placeholder="sk-or-...">
         <button id="btn-save-openrouter-key" class="btn-small btn-primary">Save</button>
+      </div>
+      <div class="settings-group">
+        <label>OpenAI API Key</label>
+        <input id="settings-openai-key" type="password" placeholder="sk-proj-...">
+        <button id="btn-save-openai-key" class="btn-small btn-primary">Save</button>
+      </div>
+      <div class="settings-group">
+        <label>DeepSeek API Key</label>
+        <input id="settings-deepseek-key" type="password" placeholder="sk-...">
+        <button id="btn-save-deepseek-key" class="btn-small btn-primary">Save</button>
+      </div>
+      <div class="settings-group">
+        <label>Groq API Key</label>
+        <input id="settings-groq-key" type="password" placeholder="gsk_...">
+        <button id="btn-save-groq-key" class="btn-small btn-primary">Save</button>
+      </div>
+      <div class="settings-group">
+        <label>Mistral API Key</label>
+        <input id="settings-mistral-key" type="password" placeholder="...">
+        <button id="btn-save-mistral-key" class="btn-small btn-primary">Save</button>
+      </div>
+      <div class="settings-group">
+        <label>Google Gemini API Key</label>
+        <p style="font-size:11px;color:#8b949e;margin-bottom:4px;">Get at <a href="https://aistudio.google.com/apikey" style="color:#7c83ff">aistudio.google.com</a></p>
+        <input id="settings-gemini-key" type="password" placeholder="AIza...">
+        <button id="btn-save-gemini-key" class="btn-small btn-primary">Save</button>
+      </div>
+      <div class="settings-group">
+        <label>Together AI API Key</label>
+        <input id="settings-together-key" type="password" placeholder="...">
+        <button id="btn-save-together-key" class="btn-small btn-primary">Save</button>
+      </div>
+      <div class="settings-group">
+        <label>Ollama &amp; LM Studio</label>
+        <p style="font-size:11px;color:#8b949e;margin-bottom:4px;">Local providers — no API key needed. Just run <code>ollama serve</code> or open LM Studio on localhost:1234.</p>
       </div>
       <div class="modal-actions">
         <button id="btn-close-settings" class="btn-secondary">Close</button>
@@ -691,6 +744,41 @@
 
       // Pending changes sync
       setupPendingChangesSync();
+
+      // Theme toggle
+      setupThemeToggle();
+    }
+
+    // ---- Theme toggle ----
+
+    function setupThemeToggle() {
+      const btn = document.getElementById('btn-theme-toggle');
+      if (!btn) return;
+
+      // Restore saved theme
+      const saved = localStorage.getItem('kovix-theme') || 'dark';
+      applyTheme(saved);
+
+      btn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || 'dark';
+        const next = current === 'dark' ? 'light' : 'dark';
+        applyTheme(next);
+        localStorage.setItem('kovix-theme', next);
+      });
+    }
+
+    function applyTheme(theme) {
+      if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+      // Update toggle button icon
+      const btn = document.getElementById('btn-theme-toggle');
+      if (btn) {
+        btn.innerHTML = theme === 'light' ? '&#9790;' : '&#9788;'; // moon vs sun
+        btn.title = theme === 'light' ? 'Switch to Dark Theme' : 'Switch to Light Theme';
+      }
     }
 
     // ---- Tab management ----

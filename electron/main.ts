@@ -392,12 +392,95 @@ function registerIpcHandlers(): void {
                         { type: 'openai', displayName: 'OpenAI', activeModel: aiService?.getProvider('openai')?.getActiveModel()?.id ?? '' },
                         { type: 'ollama', displayName: 'Ollama (Local)', activeModel: aiService?.getProvider('ollama')?.getActiveModel()?.id ?? '' },
                         { type: 'deepseek', displayName: 'DeepSeek', activeModel: aiService?.getProvider('deepseek')?.getActiveModel()?.id ?? '' },
+                        { type: 'groq', displayName: 'Groq', activeModel: aiService?.getProvider('groq')?.getActiveModel()?.id ?? '' },
+                        { type: 'mistral', displayName: 'Mistral', activeModel: aiService?.getProvider('mistral')?.getActiveModel()?.id ?? '' },
+                        { type: 'gemini', displayName: 'Gemini', activeModel: aiService?.getProvider('gemini')?.getActiveModel()?.id ?? '' },
+                        { type: 'together', displayName: 'Together AI', activeModel: aiService?.getProvider('together')?.getActiveModel()?.id ?? '' },
+                        { type: 'lm-studio', displayName: 'LM Studio (Local)', activeModel: aiService?.getProvider('lm-studio')?.getActiveModel()?.id ?? '' },
                 ];
         });
 
         ipcMain.handle('agent:getActiveProvider', async () => {
                 if (!aiService) return 'anthropic';
                 return aiService.activeProviderType ?? 'anthropic';
+        });
+
+        // ---- Agent roles ----
+        ipcMain.handle('agent:listRoles', async () => {
+                const { AGENT_ROLE_CONFIGS } = require('../src/agent/agentRoles') as typeof import('../src/agent/agentRoles');
+                return Object.values(AGENT_ROLE_CONFIGS).map(cfg => ({
+                        role: cfg.role,
+                        label: cfg.label,
+                        description: cfg.description,
+                        icon: cfg.icon,
+                        color: cfg.color,
+                        defaultExecutionMode: cfg.defaultExecutionMode,
+                }));
+        });
+
+        ipcMain.handle('agent:setRole', async (_event: Electron.IpcMainInvokeEvent, role: string) => {
+                if (!isAppStateInitialized()) return false;
+                const { AgentRole } = require('../src/agent/agentRoles') as typeof import('../src/agent/agentRoles');
+                const validRoles = new Set<string>(Object.values(AgentRole));
+                if (!validRoles.has(role)) return false;
+                getAppState().config.agentRole = role;
+                await getAppState().config.save();
+                return true;
+        });
+
+        ipcMain.handle('agent:getRole', async () => {
+                if (!isAppStateInitialized()) return 'general';
+                return getAppState().config.agentRole || 'general';
+        });
+
+        // ---- Agent slash commands ----
+        ipcMain.handle('agent:listSlashCommands', async () => {
+                const { BUILTIN_SLASH_COMMANDS } = require('../src/agent/slashCommands') as typeof import('../src/agent/slashCommands');
+                return BUILTIN_SLASH_COMMANDS.map(cmd => ({
+                        name: cmd.name,
+                        description: cmd.description,
+                        usage: cmd.usage,
+                        shortcut: cmd.shortcut ?? null,
+                }));
+        });
+
+        // ---- Telemetry ----
+        ipcMain.handle('telemetry:getUsageLog', async (_event: Electron.IpcMainInvokeEvent, options?: { limit?: number; event?: string }) => {
+                const { getTelemetryService } = require('../src/telemetry/localUsageLog') as typeof import('../src/telemetry/localUsageLog');
+                const { parseTelemetryLine } = require('../src/telemetry/localUsageLogHelpers') as typeof import('../src/telemetry/localUsageLogHelpers');
+                const fsSync = require('fs') as typeof import('fs');
+                const logPath = getTelemetryService().logFilePath;
+                try {
+                        if (!fsSync.existsSync(logPath)) return [];
+                        const raw = fsSync.readFileSync(logPath, 'utf8');
+                        const lines = raw.split('\n').filter(l => l.trim());
+                        let entries = lines.map(l => parseTelemetryLine(l)).filter((e): e is import('../src/telemetry/telemetryTypes').ITelemetryEvent => e !== null);
+                        if (options?.event) {
+                                entries = entries.filter(e => e.event === options.event);
+                        }
+                        if (options?.limit && options.limit > 0) {
+                                entries = entries.slice(-options.limit);
+                        }
+                        return entries;
+                } catch {
+                        return [];
+                }
+        });
+
+        ipcMain.handle('telemetry:getSummary', async () => {
+                const { getTelemetryService } = require('../src/telemetry/localUsageLog') as typeof import('../src/telemetry/localUsageLog');
+                const { parseTelemetryLine, buildSessionSummary } = require('../src/telemetry/localUsageLogHelpers') as typeof import('../src/telemetry/localUsageLogHelpers');
+                const fsSync = require('fs') as typeof import('fs');
+                const logPath = getTelemetryService().logFilePath;
+                try {
+                        if (!fsSync.existsSync(logPath)) return buildSessionSummary([]);
+                        const raw = fsSync.readFileSync(logPath, 'utf8');
+                        const lines = raw.split('\n').filter(l => l.trim());
+                        const entries = lines.map(l => parseTelemetryLine(l)).filter((e): e is import('../src/telemetry/telemetryTypes').ITelemetryEvent => e !== null);
+                        return buildSessionSummary(entries);
+                } catch {
+                        return buildSessionSummary([]);
+                }
         });
 
         // ---- Pending changes ----
@@ -658,7 +741,7 @@ function registerIpcHandlers(): void {
         ipcMain.handle('indexer:start', async (_event, rootPath: string, options?: unknown) => {
                 const indexer = getCodebaseIndexer();
                 const results = [];
-                for await (const progress of indexer.indexWorkspace(rootPath, options as any)) {
+                for await (const progress of indexer.indexWorkspace(rootPath, options as Record<string, unknown>)) {
                         sendToRenderer('indexer:progress', progress);
                         results.push(progress);
                 }
@@ -666,11 +749,11 @@ function registerIpcHandlers(): void {
         });
 
         ipcMain.handle('indexer:search', async (_event, query: string, options?: unknown) => {
-                return await getCodebaseIndexer().search(query, options as any);
+                return await getCodebaseIndexer().search(query, options as Record<string, unknown>);
         });
 
         ipcMain.handle('indexer:fileContext', async (_event, filePath: string, options?: unknown) => {
-                return await getCodebaseIndexer().getFileContext(filePath, options as any);
+                return await getCodebaseIndexer().getFileContext(filePath, options as Record<string, unknown>);
         });
 
         // ---- File watcher ----

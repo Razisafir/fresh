@@ -25,6 +25,10 @@ const api = {
         switchProvider: (providerType: string) => ipcRenderer.invoke('agent:switchProvider', providerType),
         listProviders: () => ipcRenderer.invoke('agent:listProviders'),
         getActiveProvider: () => ipcRenderer.invoke('agent:getActiveProvider'),
+        listRoles: () => ipcRenderer.invoke('agent:listRoles'),
+        setRole: (role: string) => ipcRenderer.invoke('agent:setRole', role),
+        getRole: () => ipcRenderer.invoke('agent:getRole'),
+        listSlashCommands: () => ipcRenderer.invoke('agent:listSlashCommands'),
 
         // ---- Pending changes ----
         acceptChange: (filePath: string) => ipcRenderer.invoke('pending:accept', filePath),
@@ -63,6 +67,10 @@ const api = {
         getCreditsStatus: () => ipcRenderer.invoke('credits:getStatus'),
         addCredits: (amount: number) => ipcRenderer.invoke('credits:add', amount),
         resetCredits: () => ipcRenderer.invoke('credits:reset'),
+
+        // ---- Telemetry ----
+        getUsageLog: (options?: { limit?: number; event?: string }) => ipcRenderer.invoke('telemetry:getUsageLog', options),
+        getTelemetrySummary: () => ipcRenderer.invoke('telemetry:getSummary'),
 
         // ---- Command confirmation ----
         respondToConfirmation: (command: string, approved: boolean) =>
