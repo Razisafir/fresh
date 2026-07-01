@@ -32,6 +32,9 @@ import { getSwarmOrchestrator, resolveSwarmApproval } from '../src/swarm/orchest
 import { getGitService } from '../src/git';
 import { initConversationStore, getConversationStore } from '../src/memory/conversationStore';
 import { initCodebaseIndexer, getCodebaseIndexer } from '../src/memory/codebaseIndexer';
+import { initCogneeService, getCogneeService } from '../src/memory/cogneeIntegration';
+import { registerCogneeTools } from '../src/memory/cogneeTools';
+import { initSkillRegistry } from '../src/skills';
 import { getFileWatcherService } from '../src/platform/fileWatcher';
 import { logger } from '../src/util/logger';
 import type { IApprovedPlan, AgentLoopEvent } from '../src/types/agent';
@@ -95,6 +98,11 @@ app.whenReady().then(async () => {
         const registry = initToolRegistry();
         logger.info(`[Main] ToolRegistry initialized with ${registry.listTools().length} built-in tools.`);
 
+        // 4a. Skill registry — after ToolRegistry, before AgentLoop.
+        // Note: initSkillRegistry() calls registerBuiltinSkills() internally.
+        const skillRegistry = initSkillRegistry();
+        logger.info(`[Main] SkillRegistry initialized with ${skillRegistry.listSkills().length} skills.`);
+
         // 5. Agent loop.
         const workspaceRoots = {
                 getWorkspaceRoots: () => state.workspaceRoots.roots,
@@ -125,6 +133,34 @@ app.whenReady().then(async () => {
         // 9. Codebase indexer (RAG).
         initCodebaseIndexer(stateDir);
         logger.info('[Main] Codebase indexer initialized.');
+
+        // 9a. Cognee knowledge-graph service — after MemoryService.
+        try {
+                await initCogneeService();
+                const cogneeSvc = getCogneeService();
+                if (cogneeSvc.isAvailable()) {
+                        // Register Cognee tools into the tool registry.
+                        registerCogneeTools(registry);
+                        logger.info('[Main] Cognee service initialized and tools registered.');
+                } else {
+                        logger.info('[Main] Cognee service initialized but not available — tools not registered.');
+                }
+        } catch (err) {
+                logger.warn(`[Main] Cognee service initialization failed: ${err instanceof Error ? err.message : String(err)}. Continuing without Cognee.`);
+        }
+
+        // 9b. Activate all default skills — after SkillRegistry + Cognee.
+        try {
+                const skillContext = {
+                        toolRegistry: registry,
+                        config: {},
+                        workspaceRoots: [...state.workspaceRoots.roots],
+                };
+                await skillRegistry.activateAll(skillContext);
+                logger.info(`[Main] ${skillRegistry.getActiveSkills().length} skills activated.`);
+        } catch (err) {
+                logger.warn(`[Main] Skill activation had errors: ${err instanceof Error ? err.message : String(err)}`);
+        }
 
         // 10. File watcher.
         const fileWatcher = getFileWatcherService();

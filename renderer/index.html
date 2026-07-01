@@ -50,6 +50,7 @@
       gap: 1px;
       height: 32px;
       -webkit-app-region: no-drag;
+      position: relative;
     }
 
     .titlebar-menu-item {
@@ -168,6 +169,122 @@
     .toolbar-btn.active {
       background: #7c83ff20;
       color: #7c83ff;
+    }
+
+    /* Layout toggle button (Chat-only vs IDE) */
+    .layout-toggle {
+      display: flex;
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .layout-btn {
+      background: none;
+      border: none;
+      color: #484f58;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 12px;
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .layout-btn:hover {
+      color: #8b949e;
+      background: #161b22;
+    }
+
+    .layout-btn.active {
+      background: #7c83ff;
+      color: #fff;
+    }
+
+    /* View menu dropdown */
+    .view-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 4px 0;
+      min-width: 200px;
+      z-index: 1000;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      display: none;
+    }
+
+    .view-dropdown.open {
+      display: block;
+    }
+
+    .view-dropdown-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      color: #c9d1d9;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 80ms ease;
+    }
+
+    .view-dropdown-item:hover {
+      background: #7c83ff15;
+    }
+
+    .view-dropdown-item .check {
+      color: #7c83ff;
+      font-size: 14px;
+    }
+
+    .view-dropdown-divider {
+      height: 1px;
+      background: #21262d;
+      margin: 4px 0;
+    }
+
+    /* Chat-only mode — hide file tree and editor */
+    body.chat-only #pane-filetree,
+    body.chat-only #resize-tree-editor,
+    body.chat-only #pane-editor,
+    body.chat-only #resize-editor-chat {
+      display: none !important;
+    }
+
+    body.chat-only #pane-chat {
+      width: 100% !important;
+      max-width: 100% !important;
+      flex: 1 !important;
+    }
+
+    body.chat-only #layout-body {
+      justify-content: center;
+    }
+
+    body.chat-only #pane-chat #chat-internal-header {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    body.chat-only #message-list {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    body.chat-only #input-area {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    body.chat-only #pending-bar {
+      max-width: 800px;
+      margin: 0 auto;
     }
 
     /* Provider & model selects — Chromium pill style */
@@ -456,6 +573,25 @@
         <button class="titlebar-menu-item" id="btn-folder">File</button>
         <button class="titlebar-menu-item" id="btn-edit-menu">Edit</button>
         <button class="titlebar-menu-item" id="btn-view-menu">View</button>
+        <div class="view-dropdown" id="view-dropdown">
+          <div class="view-dropdown-item" data-action="layout-ide">
+            <span>IDE Layout</span>
+            <span class="check" id="check-ide">&#10003;</span>
+          </div>
+          <div class="view-dropdown-item" data-action="layout-chat">
+            <span>Chat-Only Layout</span>
+            <span class="check" id="check-chat"></span>
+          </div>
+          <div class="view-dropdown-divider"></div>
+          <div class="view-dropdown-item" data-action="toggle-filetree">
+            <span>Toggle File Tree</span>
+            <span class="shortcut-hint">Ctrl+B</span>
+          </div>
+          <div class="view-dropdown-item" data-action="toggle-sidebar">
+            <span>Toggle Chat Panel</span>
+            <span class="shortcut-hint">Ctrl+J</span>
+          </div>
+        </div>
       </div>
       <span id="titlebar-title">Kovix</span>
       <div id="titlebar-controls">
@@ -497,6 +633,10 @@
         </div>
       </div>
       <div class="toolbar-right">
+        <div class="layout-toggle" id="layout-toggle">
+          <button class="layout-btn active" data-layout="ide" id="btn-layout-ide" title="IDE layout (file tree + editor + chat)">IDE</button>
+          <button class="layout-btn" data-layout="chat" id="btn-layout-chat" title="Chat-only layout (clean chat interface)">Chat</button>
+        </div>
         <button class="toolbar-btn" id="btn-theme-toggle" title="Toggle Light/Dark Theme">&#9788;</button>
         <button class="toolbar-btn" id="btn-settings" title="Settings">&#9881;</button>
       </div>
@@ -687,6 +827,115 @@
     });
 
     // ---- File menu is handled by chat.js btnFolder listener ----
+
+    // ---- View menu dropdown ----
+
+    const btnViewMenu = document.getElementById('btn-view-menu');
+    const viewDropdown = document.getElementById('view-dropdown');
+
+    if (btnViewMenu && viewDropdown) {
+      btnViewMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        viewDropdown.classList.toggle('open');
+      });
+
+      document.addEventListener('click', () => {
+        viewDropdown.classList.remove('open');
+      });
+
+      viewDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const item = e.target.closest('.view-dropdown-item');
+        if (!item) return;
+        const action = item.dataset.action;
+        if (action === 'layout-ide') setLayoutMode('ide');
+        else if (action === 'layout-chat') setLayoutMode('chat');
+        else if (action === 'toggle-filetree') togglePane('pane-filetree');
+        else if (action === 'toggle-sidebar') togglePane('pane-chat');
+        viewDropdown.classList.remove('open');
+      });
+    }
+
+    // ---- Layout mode toggle (IDE vs Chat-only) ----
+
+    let currentLayoutMode = localStorage.getItem('kovix-layout') || 'ide';
+
+    function setLayoutMode(mode) {
+      currentLayoutMode = mode;
+      localStorage.setItem('kovix-layout', mode);
+
+      // Update body class
+      if (mode === 'chat') {
+        document.body.classList.add('chat-only');
+      } else {
+        document.body.classList.remove('chat-only');
+      }
+
+      // Update toolbar toggle buttons
+      document.querySelectorAll('.layout-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.layout === mode);
+      });
+
+      // Update View menu checkmarks
+      const checkIde = document.getElementById('check-ide');
+      const checkChat = document.getElementById('check-chat');
+      if (checkIde) checkIde.textContent = mode === 'ide' ? '\u2713' : '';
+      if (checkChat) checkChat.textContent = mode === 'chat' ? '\u2713' : '';
+
+      // Relayout Monaco if switching back to IDE
+      if (mode === 'ide' && kovixEditor) {
+        setTimeout(() => {
+          if (kovixEditor.editor) kovixEditor.editor.layout();
+          if (kovixEditor.diffEditor) kovixEditor.diffEditor.layout();
+        }, 50);
+      }
+
+      // Persist to main process
+      if (api && api.setConfig) {
+        api.setConfig('uiMode', mode);
+      }
+    }
+
+    // Layout toggle button listeners
+    document.querySelectorAll('.layout-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setLayoutMode(btn.dataset.layout);
+      });
+    });
+
+    // Keyboard shortcuts for layout
+    document.addEventListener('keydown', (e) => {
+      // Ctrl+B — toggle file tree
+      if (e.ctrlKey && e.key === 'b') {
+        e.preventDefault();
+        togglePane('pane-filetree');
+      }
+      // Ctrl+J — toggle chat panel
+      if (e.ctrlKey && e.key === 'j') {
+        e.preventDefault();
+        togglePane('pane-chat');
+      }
+    });
+
+    function togglePane(paneId) {
+      const pane = document.getElementById(paneId);
+      if (!pane) return;
+      if (pane.style.display === 'none') {
+        pane.style.display = '';
+      } else {
+        pane.style.display = 'none';
+      }
+      // Relayout Monaco
+      if (kovixEditor) {
+        setTimeout(() => {
+          if (kovixEditor.editor) kovixEditor.editor.layout();
+          if (kovixEditor.diffEditor) kovixEditor.diffEditor.layout();
+        }, 50);
+      }
+    }
+
+    // Restore saved layout mode
+    setLayoutMode(currentLayoutMode);
 
     // ---- Initialize components ----
 
