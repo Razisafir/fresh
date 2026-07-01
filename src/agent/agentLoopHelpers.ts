@@ -14,9 +14,11 @@
  *     interface that matches the surface area we use (`info`, `warn`).
  *     The real logger (`src/util/logger.ts`) is structurally compatible.
  *   - The pricing types (`ICostGovernor`, `ICreditSystem`, `CreditActionType`)
- *     were previously forward-declared locally. As of Harvest-2 (Step 4),
- *     they are now imported from `src/pricing/creditSystem.ts`. The local
- *     forward declarations have been removed.
+ *     are forward-declared as local interfaces in this file. When the
+ *     pricing module is ported in a later Phase 3 round, those forward
+ *     declarations will be replaced with imports from `src/pricing/`.
+ *     The forward declarations preserve the exact shape so consumers
+ *     don't break.
  *   - `IExecutionSanityService` and `SanitySeverity` similarly forward-declared.
  *   - No logic changes. The Phase 4 fix that includes Warning in the
  *     suspicious filter is preserved verbatim.
@@ -24,15 +26,46 @@
  * Decisions referenced: D-001 (file-by-file audit), D-011 (extension route).
  */
 
-import type { ICostGovernor, ICreditSystem } from '../pricing/creditSystem';
-import type { CreditActionType } from '../pricing/pricingTypes';
+// ---------------------------------------------------------------------------
+// Forward declarations — pricing module (Layer 1 interfaces, ported in a later round)
+// ---------------------------------------------------------------------------
+// These types match the old repo's pricing module shape exactly. They are
+// declared locally so this file compiles standalone; once the pricing
+// module is ported to `src/pricing/`, the local declarations will be
+// removed and replaced with imports.
 
-// Re-export pricing types for backward compatibility — existing consumers
-// (including tests) import these from agentLoopHelpers. After all consumers
-// are migrated to import from src/pricing/ directly, these re-exports
-// can be removed.
-export type { ICostGovernor, ICreditSystem } from '../pricing/creditSystem';
-export type { CreditActionType } from '../pricing/pricingTypes';
+/**
+ * Action type for credit billing. Drives the cost-per-call table.
+ */
+export type CreditActionType =
+        | 'file_edit'
+        | 'terminal_command'
+        | 'browser_action'
+        | 'tool_call'
+        | 'llm_call';
+
+/**
+ * Per-call credit accounting interface (Layer 2 service, ported later).
+ * Shape preserved verbatim from `Kovix_2.0/src/vs/platform/construct/common/pricing/creditSystem.ts`.
+ */
+export interface ICreditSystem {
+        getCreditsRemaining(): number;
+        consumeCredits(
+                amount: number,
+                actionType: CreditActionType,
+                metadata?: { agentType?: string; sessionId?: string | undefined; description?: string },
+        ): boolean;
+}
+
+/**
+ * Cost governor interface (Layer 2 service, ported later).
+ * Shape preserved verbatim from the old repo.
+ */
+export interface ICostGovernor {
+        isEmergencyMode(): boolean;
+        shouldAutoSwitchModel(): boolean;
+        getCheaperModel(currentModel: string): string | undefined;
+}
 
 // ---------------------------------------------------------------------------
 // Forward declarations — execution sanity module (Layer 1 interface, ported later)
@@ -84,7 +117,7 @@ export interface ILogger {
 /**
  * Map an agent tool name to the corresponding CreditActionType for billing.
  *
- * Reads (search_codebase, read_file) map to a generic 'tool_call' that
+ * Reads (search_code, read_file) map to a generic 'tool_call' that
  * costs 1 credit — this is intentional: even reads cost something because
  * they consume LLM context window and compute. Writes and commands also
  * cost 1 credit. Premium models can apply a multiplier upstream in
@@ -101,7 +134,7 @@ export function mapToolToActionType(toolName: string): CreditActionType {
                         return 'terminal_command';
                 case 'web_search':
                         return 'browser_action';
-                case 'search_codebase':
+                case 'search_code':
                         return 'tool_call';
                 default:
                         // MCP tools (serverName__toolName) and any other registered tools

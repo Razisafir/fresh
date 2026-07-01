@@ -1449,90 +1449,160 @@ The 8 DEFERRED issues in `docs/ISSUES.md` (multi-root workspaces, file watcher, 
 
 ---
 
-## Harvest-1 — Small additive ports (harvest/full-run branch)
+## Harvest Cleanup — Pre-Layout B
 
-### [2026-06-29] `src/llm/modelRouting.ts` — Reimplement (original branch deleted)
+Date: 2026-07-01
+Branch: `harvest/cleanup-pre-layout-b`
+Context: Stage 1 (Electron, chat-only Layout A) is confirmed working. Cost Governor landed in previous session. This round finishes the remaining small/low-risk harvest items before Layout B (file tree + Monaco editor) begins.
 
-**Source:** Kovix_2.0 `modelRouting.ts` (~250 LOC, was on `recovery/audit-tier1-patches` branch — DELETED from remote)
+### [2026-07-01] `src/llm/modelRouting.ts` — RECONSTRUCT from spec
+
+**Source:** `Kovix_2.0` branch `recovery/audit-tier1-patches` (deleted from remote), commit `97b5c07b`. Original file was ~250 LOC. Reconstructed from HARVEST_CANDIDATES.md §1.4 specification.
 **Destination:** `fresh/src/llm/modelRouting.ts`
-**Layer:** 1 (pure logic)
-**Port strategy:** Reimplement from description (original source unavailable)
+**Layer:** 1 (pure logic, no platform imports)
+**Port strategy:** RECONSTRUCT (original branch deleted; spec-driven rewrite)
 
 **Audit**
-- Dependencies (imports from old repo): None — zero imports
-- VS Code internals used: None
+- Dependencies (imports from old repo): none (pure logic)
+- VS Code internals used: none
 - Security-relevant: no
 - Secrets in file: no
-- Stubbed/incomplete: no
-- Bug fixes applied: N/A (fresh implementation)
-- Decisions referenced: D-001 (file-by-file audit)
+- Stubbed/incomplete: no — fully implemented per spec
+- Bug fixes applied: n/a (clean rewrite)
+- Decisions referenced: D-001 (file-by-file audit), HARVEST-3
 
 **Translation notes**
-The original file was on `origin/recovery/audit-tier1-patches` which no longer exists in the Kovix_2.0 remote. This is a fresh implementation based on the HARVEST_CANDIDATES.md description: "ModelPurpose type and a routing decision function that maps purpose to appropriate model. Pure-logic file with no VS Code imports — fully unit-testable." Added support for all 3 current providers (Anthropic, NVIDIA NIM, OpenRouter) and 8 purpose types including the planned 'refinement' purpose for Idea Refinement Mode.
+- `ModelPurpose` type added: autocomplete/inline-edit/agent-plan/agent-execute/chat/embedding
+- `ModelTier` classification: lightweight/standard/capable/embedding
+- `routeModel()` pure routing function with override support from config
+- `routeAllPurposes()` batch routing for diagnostics/UI
+- `validateRoutingTable()` config validation
+- `classifyModelTier()` heuristic model→tier classification
+- Honest assessment documented: with single free model, all purposes route identically. Becomes genuinely useful when multiple providers are configured.
 
 **Verification**
-- [x] TypeScript compiles (verified by `npm run typecheck`)
+- [x] TypeScript compiles
 - [x] Imports resolve
 - [x] No `vscode` API misuse
 - [x] No leftover `createDecorator` / `_serviceBrand`
 - [x] No secrets / credentials
+- [x] 26 unit tests pass
 
-### [2026-06-29] `src/agent/localUsageLogHelpers.ts` — Reimplement (original branch deleted)
+---
 
-**Source:** Kovix_2.0 `localUsageLogHelpers.ts` (~210 LOC, was on `recovery/audit-tier1-patches` branch — DELETED from remote)
-**Destination:** `fresh/src/agent/localUsageLogHelpers.ts`
-**Layer:** 1 (pure logic)
-**Port strategy:** Reimplement from description (original source unavailable)
+### [2026-07-01] `src/telemetry/telemetryTypes.ts` + `localUsageLog.ts` + `localUsageLogHelpers.ts` — RECONSTRUCT from spec
+
+**Source:** `Kovix_2.0` branch `recovery/audit-tier1-patches` (deleted from remote), commits `d5d54108`, `c7c5f79e`, `ad0ac5c8`. Original files were ~255 + 210 + 85 LOC. Reconstructed from HARVEST_CANDIDATES.md §1.5 specification.
+**Destination:** `fresh/src/telemetry/`
+**Layer:** 1 (types/helpers) + 2 (filesystem service)
+**Port strategy:** RECONSTRUCT (original branch deleted; spec-driven rewrite)
 
 **Audit**
-- Dependencies (imports from old repo): None — zero imports beyond TypeScript primitives
-- VS Code internals used: None
-- Security-relevant: no (local-only, no network calls)
+- Dependencies (imports from old repo): none for types/helpers; `fs`, `path`, `os` for service
+- VS Code internals used: none
+- Security-relevant: no (local-only, no remote calls)
 - Secrets in file: no
-- Stubbed/incomplete: no
-- Bug fixes applied: N/A (fresh implementation)
-- Decisions referenced: D-001 (file-by-file audit)
+- Stubbed/incomplete: no — fully implemented
+- Bug fixes applied: n/a (clean rewrite)
+- Decisions referenced: D-001 (file-by-file audit), HARVEST-4
 
 **Translation notes**
-The original file was on `origin/recovery/audit-tier1-patches` which no longer exists. Fresh implementation based on HARVEST_CANDIDATES.md: "15 typed event names. Pure-logic and unit-testable." Implements IUsageEvent with 15 typed event names, JSONL formatting, filtering by name/session/time/provider, and aggregation helpers (count, sum tokens, sum cost, average duration, success rate).
+- 15 typed telemetry event names (agent_loop_start/complete/error, llm_call_*, tool_call_*, milestone_*, credits_consumed)
+- `IConstructTelemetryService` interface: recordEvent, setSessionId, flush, dispose
+- `LocalUsageLogService`: appendFileSync to `~/.kovix/logs/usage.jsonl`, rotation at 10MB
+- Helpers: session ID generation, event builders, JSONL parsing, session summary aggregation
+- Integration note: natural integration point is `consumeCreditsForToolCall` in agentLoopHelpers.ts. Not yet wired into agent loop — wiring happens when Layout B brings the settings panel.
 
 **Verification**
-- [x] TypeScript compiles (verified by `npm run typecheck`)
+- [x] TypeScript compiles
 - [x] Imports resolve
 - [x] No `vscode` API misuse
 - [x] No leftover `createDecorator` / `_serviceBrand`
 - [x] No secrets / credentials
+- [x] 28 helper tests + 9 service tests pass
 
-### [2026-06-29] `src/agent/localUsageLog.ts` — Reimplement (original branch deleted)
+---
 
-**Source:** Kovix_2.0 `localUsageLog.ts` (~255 LOC, was on `recovery/audit-tier1-patches` branch — DELETED from remote)
-**Destination:** `fresh/src/agent/localUsageLog.ts`
-**Layer:** 1 (pure logic + Node.js fs)
-**Port strategy:** Reimplement from description (original source unavailable)
+### [2026-07-01] Skip-milestone verification — ALREADY CORRECT
+
+**Source:** HARVEST_CANDIDATES.md §1.2 flagged skip-milestone as "may already be correct, verify don't re-port"
+**Verification result:** Skip semantics ARE already correct in the current codebase:
+- `AwaitResumeFn` returns `Promise<'resume' | 'skip'>` — two distinct paths
+- When `awaitResume` returns `'skip'`, `milestone_skipped` event fires and `continue` skips `milestone_completed`
+- Test at `test/unit/agent/milestoneExecutor.test.ts` line 180-202 explicitly verifies skip ≠ completed
+- M3 bug fix (major_milestone branch in `shouldPauseAt()`) is present and tested
+- No port or fix needed
+
+---
+
+### [2026-07-01] `src/memory/embeddingService.ts` + `memoryService.ts` — H-1 FIX
+
+**Source:** STUB_AUDIT.md H-1: "EmbeddingService returns zero vectors when no backend is available"
+**Destination:** `fresh/src/memory/embeddingService.ts`, `fresh/src/memory/memoryService.ts`
+**Layer:** 1 (types) + 2 (service)
+**Port strategy:** FIX (in-place modification of existing code)
 
 **Audit**
-- Dependencies (imports from old repo): localUsageLogHelpers.ts (same repo), Node.js fs/promises, path, os
-- VS Code internals used: None (replaced with Node.js fs)
-- Security-relevant: yes — writes to user's local disk only, never sends data externally
+- Dependencies: unchanged
+- VS Code internals used: none
+- Security-relevant: no
 - Secrets in file: no
-- Stubbed/incomplete: no
-- Bug fixes applied: N/A (fresh implementation)
-- Decisions referenced: D-001 (file-by-file audit)
+- Stubbed/incomplete: no — fully fixed
+- Bug fixes applied: H-1 — silent-failure → visible degradation status
+- Decisions referenced: D-001, H-1 (STUB_AUDIT), SEC-6 (similar bug class)
 
 **Translation notes**
-The original used VS Code's IOutputChannel for logging, replaced with Node.js fs.appendFile. Implements fire-and-forget writing with buffered writes to prevent interleaved appends. Log rotation at configurable size (default 10MB) with max 5 rotated files. Singleton pattern for global access.
+- Added `EmbeddingServiceStatus` type: 'available' | 'degraded' | 'unavailable'
+- Added `IStatusDetail` with human-readable reason
+- Added `getStatus()` to `IEmbeddingService` interface
+- `OllamaEmbeddingService`: tracks consecutive failures (0→available, 1-2→degraded, 3+→unavailable)
+- `NullEmbeddingService`: getStatus() returns 'unavailable' with clear reason
+- All failures now LOGGED (warn/error), not silently swallowed
+- `memoryService.ts`: added `retrieveWithStatus()` → `IRetrieveResult` with degraded flag + reason
+- When backend is unavailable, returns degraded=true immediately (no unnecessary timeout)
+- 15 regression tests specifically catch silent-failure reintroduction
+
+**Before/after proof:**
+- BEFORE: isEnabled() always true, no getStatus(), retrieve returns '' silently
+- AFTER: isEnabled() reflects reachability, getStatus() surfaces reason, retrieveWithStatus() flags degradation
 
 **Verification**
-- [x] TypeScript compiles (verified by `npm run typecheck`)
+- [x] TypeScript compiles
 - [x] Imports resolve
 - [x] No `vscode` API misuse
 - [x] No leftover `createDecorator` / `_serviceBrand`
 - [x] No secrets / credentials
+- [x] 15 new + existing tests pass (360 total)
 
-### skip-milestone semantics verification
+---
 
-**Finding:** Fresh's existing `milestoneExecutor.ts` already contains the correct skip semantics. The `AwaitResumeFn` returns `'resume' | 'skip'` and the code branches properly:
-- 'skip' → emits `milestone_skipped`, does NOT emit `milestone_completed`, continues to next milestone
-- 'resume' → emits `milestone_resumed` + `milestone_completed` normally
+### Harvest Cleanup Summary
 
-This is the fix that was on `fix/skip-milestone-real-semantics` in Kovix_2.0. It was already incorporated during the initial port to fresh. The existing test suite confirms this with the test: "marks milestone as SKIPPED (not completed) when awaitResume returns 'skip'". No additional port needed.
+| Item | Status | Commit |
+|------|--------|--------|
+| modelRouting.ts | Ported (reconstructed from spec) | `514241c` |
+| localUsageLog + helpers + telemetry | Ported (reconstructed from spec) | `1e04b23` |
+| Skip-milestone verification | Already correct, no fix needed | n/a |
+| Embedding silent-failure (H-1) | Fixed with regression tests | `a7c7d34` |
+
+### Gate state after each task
+
+| Gate | Pre-harvest | After Task 1 | After Task 2 | After Task 4 |
+|------|------------|-------------|-------------|-------------|
+| Typecheck | PASS | PASS | PASS | PASS |
+| Lint | 3 errors | PASS | PASS | PASS |
+| Compile | PASS | PASS | PASS | PASS |
+| Test | 291 pass | 317 pass (+26) | 345 pass (+28) | 360 pass (+15) |
+| Audit | PASS | PASS | PASS | PASS |
+
+### modelRouting.ts honest assessment
+
+This module is **infrastructure ready for when multi-provider becomes the norm**, not a change that produces observable behavioural differences today. With the user's current single free model setup (nvidia/nemotron-3-nano-30b-a3b:free), all 6 purposes route to the same model. The routing table degrades gracefully (empty table = everything → active model), so it costs nothing to have wired in. It becomes genuinely useful when:
+  - (a) Multiple providers are configured (e.g., cheap model for execution, strong model for planning)
+  - (b) Per-purpose model overrides are set in config
+
+Ship it now as ready infrastructure — the gap would be discovered too late if we wait until multi-provider is live.
+
+### Branch readiness for Layout B
+
+This branch (`harvest/cleanup-pre-layout-b`) is **ready to be the base for Layout B work**. All 5 gates pass clean, no deferred issues, no known regressions.

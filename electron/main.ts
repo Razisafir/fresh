@@ -27,8 +27,12 @@ import { initToolRegistry } from '../src/tools/toolRegistryService';
 import { initAgentLoop, getAgentLoop } from '../src/agent/agentLoop';
 import { McpManager } from '../src/mcp/mcpManager';
 import { resolveCommandConfirmation } from '../src/platform/prompts';
-import { CreditSystemService, CostGovernorService } from '../src/pricing/creditSystem';
-import type { ICreditBudget } from '../src/pricing/pricingTypes';
+import { initCostGovernor, getCreditSystem } from '../src/swarm/costGovernor';
+import { getSwarmOrchestrator, resolveSwarmApproval } from '../src/swarm/orchestrator';
+import { getGitService } from '../src/git';
+import { initConversationStore, getConversationStore } from '../src/memory/conversationStore';
+import { initCodebaseIndexer, getCodebaseIndexer } from '../src/memory/codebaseIndexer';
+import { getFileWatcherService } from '../src/platform/fileWatcher';
 import { logger } from '../src/util/logger';
 import type { IApprovedPlan, AgentLoopEvent } from '../src/types/agent';
 
@@ -39,13 +43,24 @@ import type { IApprovedPlan, AgentLoopEvent } from '../src/types/agent';
 let mainWindow: BrowserWindow | null = null;
 let aiService: ConstructAIService | undefined;
 let mcpManager: McpManager | undefined;
-let creditSystem: CreditSystemService | undefined;
-let costGovernor: CostGovernorService | undefined;
 let _activeAbortController: AbortController | null = null;
 
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Global error handlers (production hardening)
+// ---------------------------------------------------------------------------
+
+process.on('uncaughtException', (err: Error) => {
+        logger.error(`[Main] Uncaught exception: ${err.message}\n${err.stack ?? ''}`);
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+        const msg = reason instanceof Error ? `${reason.message}\n${reason.stack ?? ''}` : String(reason);
+        logger.error(`[Main] Unhandled rejection: ${msg}`);
+});
 
 app.whenReady().then(async () => {
         logger.info('Kovix starting up (Electron standalone — Phase 0 pivot, D-015).');
@@ -92,26 +107,37 @@ app.whenReady().then(async () => {
         });
         logger.info('[Main] AgentLoop service created.');
 
-        // 5c. Cost Governor — initializes with default budget (unlimited).
-        // Users can set a budget via the Settings UI. The governor blocks
-        // LLM calls when credits run out, preventing runaway API spend.
-        creditSystem = new CreditSystemService();
-        costGovernor = new CostGovernorService(creditSystem);
-        logger.info('[Main] Cost Governor initialized (budget: default unlimited).');
-
-        // 5b. Subscribe to pendingChangesService events so the renderer
-        //     gets notified when the agent stages files (not just when the
-        //     user clicks accept/reject). Without this, the pending changes
-        //     bar stays at 0 during agent execution.
-        pendingChangesService.onDidChangePendingChanges(() => {
-                notifyPendingChanged();
-        });
-
         // 6. MCP manager.
         mcpManager = new McpManager(registry);
         void mcpManager.start().then(() => {
                 logger.verbose(`[MCP] Started: ${mcpManager!.connectedServerCount} servers, ${mcpManager!.registeredToolCount} tools registered`);
         });
+
+        // 7. Cost governor (required before swarm — per 08_SWARM_DESIGN.md §5).
+        const { creditSystem } = initCostGovernor({ totalCredits: 500, enabled: true });
+        logger.info(`[Main] Cost governor initialized: ${creditSystem.getTotalCredits()} credits.`);
+
+        // 8. Conversation store (chat persistence).
+        const stateDir = path.join(app.getPath('userData'), 'kovix-state');
+        initConversationStore(stateDir);
+        logger.info('[Main] Conversation store initialized.');
+
+        // 9. Codebase indexer (RAG).
+        initCodebaseIndexer(stateDir);
+        logger.info('[Main] Codebase indexer initialized.');
+
+        // 10. File watcher.
+        const fileWatcher = getFileWatcherService();
+        // Forward file change events to renderer.
+        fileWatcher.onDidChange(e => sendToRenderer('file:changed', e));
+        fileWatcher.onDidCreate(e => sendToRenderer('file:created', e));
+        fileWatcher.onDidDelete(e => sendToRenderer('file:deleted', e));
+
+        // Start watching workspace roots.
+        if (state.workspaceRoots.roots.length > 0) {
+                fileWatcher.startWatching([...state.workspaceRoots.roots]);
+                logger.info(`[Main] File watcher started for ${state.workspaceRoots.roots.length} root(s).`);
+        }
 
         // Create the main window.
         createWindow();
@@ -123,7 +149,8 @@ app.whenReady().then(async () => {
                 `Kovix ready. AI provider: ${aiService.activeProviderType ?? 'none'}, ` +
                 `tools: ${registry.listTools().length}, ` +
                 `agent loop: ready, ` +
-                `MCP: ${mcpManager.connectedServerCount} servers.`,
+                `MCP: ${mcpManager.connectedServerCount} servers, ` +
+                `providers: ${aiService.activeProviderType ?? 'none'}.`,
         );
 });
 
@@ -150,11 +177,14 @@ function createWindow(): void {
                 minWidth: 600,
                 minHeight: 400,
                 title: 'Kovix',
+                frame: false,                      // Frameless — custom title bar
+                titleBarStyle: 'hidden',           // macOS: hide title but keep traffic lights
+                backgroundColor: '#0d1117',        // Match the dark theme background
                 webPreferences: {
                         preload: path.join(__dirname, 'preload.js'),
                         contextIsolation: true,
                         nodeIntegration: false,
-                        sandbox: false,
+                        sandbox: true,
                 },
         });
 
@@ -220,7 +250,15 @@ function registerIpcHandlers(): void {
         });
 
         // ---- Secrets ----
+        ipcMain.handle('secrets:has', async (_event, key: string) => {
+                if (!isAppStateInitialized()) return false;
+                const value = await getAppState().secrets.get(key);
+                return value !== undefined && value !== null && value !== '';
+        });
+
         ipcMain.handle('secrets:get', async (_event, key: string) => {
+                // SECURITY: Only expose secrets to renderer for provider key setup.
+                // Consider migrating to secrets:has + main-process-only usage.
                 if (!isAppStateInitialized()) return undefined;
                 return getAppState().secrets.get(key);
         });
@@ -250,16 +288,7 @@ function registerIpcHandlers(): void {
                 try {
                         const plan = await agentLoop.runPlanningPhase(text, _activeAbortController.signal);
                         // Forward plan to renderer for approval.
-                        // Include rawResponse so the plan card can display the
-                        // full LLM output even if structured step parsing fails.
-                        sendToRenderer('agent:event', {
-                                type: 'plan_ready',
-                                plan: {
-                                        steps: plan.steps,
-                                        summary: plan.summary,
-                                        rawResponse: plan.rawResponse,
-                                },
-                        });
+                        sendToRenderer('agent:event', { type: 'plan_ready', plan });
                         return { success: true, stepCount: plan.steps.length };
                 } catch (error) {
                         const msg = error instanceof Error ? error.message : String(error);
@@ -302,28 +331,6 @@ function registerIpcHandlers(): void {
 
                 try {
                         const plan = planData as IApprovedPlan;
-
-                        // If milestones are empty (renderer doesn't extract them), extract from steps.
-                        if (!plan.milestones || plan.milestones.length === 0) {
-                                const milestones = agentLoop.extractMilestonesFromPlan(
-                                        plan.steps.map(s => ({
-                                                index: s.index,
-                                                action: s.action,
-                                                target: s.target,
-                                                description: s.description,
-                                        })),
-                                );
-                                (plan as { milestones: unknown }).milestones = milestones;
-                                logger.info(`[Main] Extracted ${milestones.length} milestones from plan steps (renderer sent none)`);
-                        } else {
-                                logger.info(`[Main] Using ${plan.milestones.length} milestones from renderer`);
-                        }
-
-                        // Log milestone details for debugging
-                        for (const m of (plan.milestones as Array<{ name: string; isMajor: boolean; stepIndices: number[] }>)) {
-                                logger.info(`[Main] Milestone: ${m.name} (major=${m.isMajor}, steps=${m.stepIndices?.join(',')})`);
-                        }
-
                         const stream = agentLoop.runWithApprovedPlan(plan, _activeAbortController.signal);
 
                         // Forward events to renderer as they arrive.
@@ -403,12 +410,98 @@ function registerIpcHandlers(): void {
                         { type: 'anthropic', displayName: 'Anthropic', activeModel: aiService?.getProvider('anthropic')?.getActiveModel()?.id ?? '' },
                         { type: 'nvidia-nim', displayName: 'NVIDIA NIM', activeModel: aiService?.getProvider('nvidia-nim')?.getActiveModel()?.id ?? '' },
                         { type: 'openrouter', displayName: 'OpenRouter', activeModel: aiService?.getProvider('openrouter')?.getActiveModel()?.id ?? '' },
+                        { type: 'openai', displayName: 'OpenAI', activeModel: aiService?.getProvider('openai')?.getActiveModel()?.id ?? '' },
+                        { type: 'ollama', displayName: 'Ollama (Local)', activeModel: aiService?.getProvider('ollama')?.getActiveModel()?.id ?? '' },
+                        { type: 'deepseek', displayName: 'DeepSeek', activeModel: aiService?.getProvider('deepseek')?.getActiveModel()?.id ?? '' },
+                        { type: 'groq', displayName: 'Groq', activeModel: aiService?.getProvider('groq')?.getActiveModel()?.id ?? '' },
+                        { type: 'mistral', displayName: 'Mistral', activeModel: aiService?.getProvider('mistral')?.getActiveModel()?.id ?? '' },
+                        { type: 'gemini', displayName: 'Gemini', activeModel: aiService?.getProvider('gemini')?.getActiveModel()?.id ?? '' },
+                        { type: 'together', displayName: 'Together AI', activeModel: aiService?.getProvider('together')?.getActiveModel()?.id ?? '' },
+                        { type: 'lm-studio', displayName: 'LM Studio (Local)', activeModel: aiService?.getProvider('lm-studio')?.getActiveModel()?.id ?? '' },
                 ];
         });
 
         ipcMain.handle('agent:getActiveProvider', async () => {
                 if (!aiService) return 'anthropic';
                 return aiService.activeProviderType ?? 'anthropic';
+        });
+
+        // ---- Agent roles ----
+        ipcMain.handle('agent:listRoles', async () => {
+                const { AGENT_ROLE_CONFIGS } = require('../src/agent/agentRoles') as typeof import('../src/agent/agentRoles');
+                return Object.values(AGENT_ROLE_CONFIGS).map(cfg => ({
+                        role: cfg.role,
+                        label: cfg.label,
+                        description: cfg.description,
+                        icon: cfg.icon,
+                        color: cfg.color,
+                        defaultExecutionMode: cfg.defaultExecutionMode,
+                }));
+        });
+
+        ipcMain.handle('agent:setRole', async (_event: Electron.IpcMainInvokeEvent, role: string) => {
+                if (!isAppStateInitialized()) return false;
+                const { AgentRole } = require('../src/agent/agentRoles') as typeof import('../src/agent/agentRoles');
+                const validRoles = new Set<string>(Object.values(AgentRole));
+                if (!validRoles.has(role)) return false;
+                getAppState().config.agentRole = role;
+                await getAppState().config.save();
+                return true;
+        });
+
+        ipcMain.handle('agent:getRole', async () => {
+                if (!isAppStateInitialized()) return 'general';
+                return getAppState().config.agentRole || 'general';
+        });
+
+        // ---- Agent slash commands ----
+        ipcMain.handle('agent:listSlashCommands', async () => {
+                const { BUILTIN_SLASH_COMMANDS } = require('../src/agent/slashCommands') as typeof import('../src/agent/slashCommands');
+                return BUILTIN_SLASH_COMMANDS.map(cmd => ({
+                        name: cmd.name,
+                        description: cmd.description,
+                        usage: cmd.usage,
+                        shortcut: cmd.shortcut ?? null,
+                }));
+        });
+
+        // ---- Telemetry ----
+        ipcMain.handle('telemetry:getUsageLog', async (_event: Electron.IpcMainInvokeEvent, options?: { limit?: number; event?: string }) => {
+                const { getTelemetryService } = require('../src/telemetry/localUsageLog') as typeof import('../src/telemetry/localUsageLog');
+                const { parseTelemetryLine } = require('../src/telemetry/localUsageLogHelpers') as typeof import('../src/telemetry/localUsageLogHelpers');
+                const fsSync = require('fs') as typeof import('fs');
+                const logPath = getTelemetryService().logFilePath;
+                try {
+                        if (!fsSync.existsSync(logPath)) return [];
+                        const raw = fsSync.readFileSync(logPath, 'utf8');
+                        const lines = raw.split('\n').filter(l => l.trim());
+                        let entries = lines.map(l => parseTelemetryLine(l)).filter((e): e is import('../src/telemetry/telemetryTypes').ITelemetryEvent => e !== null);
+                        if (options?.event) {
+                                entries = entries.filter(e => e.event === options.event);
+                        }
+                        if (options?.limit && options.limit > 0) {
+                                entries = entries.slice(-options.limit);
+                        }
+                        return entries;
+                } catch {
+                        return [];
+                }
+        });
+
+        ipcMain.handle('telemetry:getSummary', async () => {
+                const { getTelemetryService } = require('../src/telemetry/localUsageLog') as typeof import('../src/telemetry/localUsageLog');
+                const { parseTelemetryLine, buildSessionSummary } = require('../src/telemetry/localUsageLogHelpers') as typeof import('../src/telemetry/localUsageLogHelpers');
+                const fsSync = require('fs') as typeof import('fs');
+                const logPath = getTelemetryService().logFilePath;
+                try {
+                        if (!fsSync.existsSync(logPath)) return buildSessionSummary([]);
+                        const raw = fsSync.readFileSync(logPath, 'utf8');
+                        const lines = raw.split('\n').filter(l => l.trim());
+                        const entries = lines.map(l => parseTelemetryLine(l)).filter((e): e is import('../src/telemetry/telemetryTypes').ITelemetryEvent => e !== null);
+                        return buildSessionSummary(entries);
+                } catch {
+                        return buildSessionSummary([]);
+                }
         });
 
         // ---- Pending changes ----
@@ -443,39 +536,308 @@ function registerIpcHandlers(): void {
                 }));
         });
 
-        // ---- Command confirmation ----
-        ipcMain.handle('prompt:confirmResponse', async (_event, command: string, approved: boolean) => {
-                resolveCommandConfirmation(command, approved);
+        // ---- File system (for file tree / editor) ----
+        ipcMain.handle('fs:listDirectory', async (_event: Electron.IpcMainInvokeEvent, dirPath: string) => {
+                try {
+                        const { listDirectory } = require('../src/platform/fs') as typeof import('../src/platform/fs');
+                        // Normalize path separators for the current OS
+                        const normalized = path.normalize(dirPath);
+                        logger.info(`[fs:listDirectory] dirPath="${dirPath}" normalized="${normalized}"`);
+                        const entries = await listDirectory(normalized);
+                        // Sort: directories first, then files, alphabetical within each group.
+                        entries.sort((a, b) => {
+                                if (a[1] === b[1]) return a[0].localeCompare(b[0]);
+                                return a[1] === 'directory' ? -1 : 1;
+                        });
+                        return { entries };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
         });
 
-        // ---- Cost Governor ----
-        ipcMain.handle('credits:getStatus', async () => {
-                if (!creditSystem || !costGovernor) {
-                        return { creditsUsed: 0, creditsRemaining: Infinity, emergencyMode: false, budget: { maxCreditsPerTask: 0, enabled: true } };
+        ipcMain.handle('fs:readFile', async (_event: Electron.IpcMainInvokeEvent, filePath: string) => {
+                try {
+                        const { readFileText } = require('../src/platform/fs') as typeof import('../src/platform/fs');
+                        const normalized = path.normalize(filePath);
+                        const content = await readFileText(normalized);
+                        return { content };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        // ---- Pending changes (detail) ----
+        ipcMain.handle('pending:getEntryDetail', async (_event: Electron.IpcMainInvokeEvent, filePath: string) => {
+                const entry = pendingChangesService.pendingEntries.find(e => e.uri.fsPath === filePath);
+                if (!entry) {
+                        return null;
                 }
                 return {
-                        creditsUsed: creditSystem.getCreditsUsed(),
-                        creditsRemaining: creditSystem.getCreditsRemaining(),
-                        emergencyMode: costGovernor.isEmergencyMode(),
-                        budget: creditSystem.getBudget(),
+                        filePath: entry.uri.fsPath,
+                        isNewFile: entry.isNewFile,
+                        originalContent: entry.originalContent,
+                        proposedContent: entry.proposedContent,
                 };
         });
 
-        ipcMain.handle('credits:setBudget', async (_event, budget: ICreditBudget) => {
-                if (!creditSystem) return;
-                creditSystem.setBudget(budget);
-                logger.info(`[Main] Budget updated: maxCreditsPerTask=${budget.maxCreditsPerTask}, enabled=${budget.enabled}`);
+        // ---- Swarm (multi-agent) ----
+        ipcMain.handle('swarm:execute', async (_event: Electron.IpcMainInvokeEvent, planData: unknown) => {
+                if (!aiService) return { error: 'AI service not initialized' };
+                try {
+                        const plan = planData as IApprovedPlan;
+                        const orchestrator = getSwarmOrchestrator(aiService);
+                        const stream = orchestrator.execute(plan, {
+                                aiService,
+                                toolRegistry: initToolRegistry(),
+                                pendingChanges: pendingChangesService,
+                                workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                        });
+
+                        for await (const event of stream) {
+                                sendToRenderer('swarm:event', event);
+                        }
+                        return { success: true };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
         });
 
-        ipcMain.handle('credits:resetSession', async () => {
-                if (!creditSystem) return;
-                creditSystem.resetSession();
-                logger.info('[Main] Credit session reset.');
+        ipcMain.handle('swarm:approvePartition', async () => {
+                resolveSwarmApproval(true);
+                return { success: true };
         });
 
-        ipcMain.handle('credits:getUsageHistory', async (_event, limit?: number) => {
-                if (!creditSystem) return [];
-                return creditSystem.getUsageHistory(limit);
+        ipcMain.handle('swarm:rejectPartition', async () => {
+                resolveSwarmApproval(false);
+                return { success: true };
+        });
+
+        // ---- Cost governor ----
+        ipcMain.handle('credits:getStatus', async () => {
+                const cs = getCreditSystem();
+                return {
+                        remaining: cs.getCreditsRemaining(),
+                        total: cs.getTotalCredits(),
+                        enabled: cs.isEnabled(),
+                        stats: cs.getStats(),
+                };
+        });
+
+        ipcMain.handle('credits:add', async (_event: Electron.IpcMainInvokeEvent, amount: number) => {
+                if (typeof amount !== 'number' || amount <= 0) {
+                        return { error: 'amount must be a positive number' };
+                }
+                getCreditSystem().addCredits(amount);
+                return { success: true };
+        });
+
+        ipcMain.handle('credits:reset', async () => {
+                getCreditSystem().reset();
+                return { success: true };
+        });
+
+        // ---- Git integration ----
+        const gitService = getGitService();
+
+        ipcMain.handle('git:status', async (_event, repoPath: string) => {
+                try { return await gitService.getStatus(repoPath); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:branches', async (_event, repoPath: string) => {
+                try { return await gitService.getBranches(repoPath); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:log', async (_event, repoPath: string, count?: number) => {
+                try { return await gitService.getLog(repoPath, count); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:diff', async (_event, repoPath: string, options?: { staged?: boolean; filePath?: string }) => {
+                try { return await gitService.getDiff(repoPath, options); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:diffSummary', async (_event, repoPath: string) => {
+                try { return await gitService.getDiffSummary(repoPath); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:stage', async (_event, repoPath: string, filePaths: string[]) => {
+                try { await gitService.stage(repoPath, filePaths); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:unstage', async (_event, repoPath: string, filePaths: string[]) => {
+                try { await gitService.unstage(repoPath, filePaths); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:commit', async (_event, repoPath: string, message: string) => {
+                try { return await gitService.commit(repoPath, message); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string) => {
+                try { await gitService.checkout(repoPath, branch); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:createBranch', async (_event, repoPath: string, name: string, checkout?: boolean) => {
+                try { await gitService.createBranch(repoPath, name, checkout); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:deleteBranch', async (_event, repoPath: string, name: string, force?: boolean) => {
+                try { await gitService.deleteBranch(repoPath, name, force); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:pull', async (_event, repoPath: string, remote?: string, branch?: string) => {
+                try { return await gitService.pull(repoPath, remote, branch); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:push', async (_event, repoPath: string, remote?: string, branch?: string) => {
+                try { await gitService.push(repoPath, remote, branch); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:stash', async (_event, repoPath: string, message?: string) => {
+                try { await gitService.stash(repoPath, message); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:stashPop', async (_event, repoPath: string) => {
+                try { await gitService.stashPop(repoPath); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string) => {
+                return await gitService.blame(repoPath, filePath);
+        });
+
+        ipcMain.handle('git:fileHistory', async (_event, repoPath: string, filePath: string, count?: number) => {
+                return await gitService.getFileHistory(repoPath, filePath, count);
+        });
+
+        ipcMain.handle('git:remotes', async (_event, repoPath: string) => {
+                return await gitService.getRemotes(repoPath);
+        });
+
+        ipcMain.handle('git:init', async (_event, repoPath: string) => {
+                await gitService.init(repoPath);
+        });
+
+        // ---- Conversation store ----
+        ipcMain.handle('conversation:list', async () => {
+                try { return await getConversationStore().listConversations(); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('conversation:load', async (_event, id: string) => {
+                try { return await getConversationStore().loadConversation(id); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('conversation:create', async (_event, title?: string) => {
+                try { return await getConversationStore().createConversation(title); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('conversation:delete', async (_event, id: string) => {
+                try { await getConversationStore().deleteConversation(id); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('conversation:getActive', async () => {
+                try { return await getConversationStore().getActiveConversation(); }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('conversation:setActive', async (_event, id: string) => {
+                try { await getConversationStore().setActiveConversation(id); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
+        });
+
+        ipcMain.handle('conversation:addMessage', async (_event, conversationId: string, message: unknown) => {
+                try {
+                        const stored = message as Record<string, unknown>;
+                        const validRoles = ['user', 'assistant', 'system'] as const;
+                        const role = validRoles.includes(stored.role as typeof validRoles[number])
+                                ? stored.role as 'user' | 'assistant' | 'system'
+                                : 'user'; // Safe default
+                        const chatMsg: import('../src/types/llm').IChatMessage = {
+                                role,
+                                content: String(stored.content ?? ''),
+                        };
+                        await getConversationStore().addMessage(conversationId, chatMsg);
+                        return { success: true };
+                } catch (e) {
+                        return { error: (e as Error).message };
+                }
+        });
+
+        // ---- Codebase indexer ----
+        ipcMain.handle('indexer:status', async () => {
+                return getCodebaseIndexer().getIndexStatus();
+        });
+
+        ipcMain.handle('indexer:start', async (_event, rootPath: string, options?: unknown) => {
+                const indexer = getCodebaseIndexer();
+                const results = [];
+                for await (const progress of indexer.indexWorkspace(rootPath, options as Record<string, unknown>)) {
+                        sendToRenderer('indexer:progress', progress);
+                        results.push(progress);
+                }
+                return results;
+        });
+
+        ipcMain.handle('indexer:search', async (_event, query: string, options?: unknown) => {
+                return await getCodebaseIndexer().search(query, options as Record<string, unknown>);
+        });
+
+        ipcMain.handle('indexer:fileContext', async (_event, filePath: string, options?: unknown) => {
+                return await getCodebaseIndexer().getFileContext(filePath, options as Record<string, unknown>);
+        });
+
+        // ---- File watcher ----
+        ipcMain.handle('watcher:start', async (_event, rootPaths: string[]) => {
+                getFileWatcherService().startWatching(rootPaths);
+        });
+
+        ipcMain.handle('watcher:stop', async () => {
+                getFileWatcherService().stopWatching();
+        });
+
+        // ---- Window controls (for frameless title bar) ----
+        ipcMain.handle('window:minimize', async () => {
+                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
+        });
+        ipcMain.handle('window:maximize', async () => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                        if (mainWindow.isMaximized()) {
+                                mainWindow.unmaximize();
+                        } else {
+                                mainWindow.maximize();
+                        }
+                }
+        });
+        ipcMain.handle('window:close', async () => {
+                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+        });
+        ipcMain.handle('window:isMaximized', async () => {
+                if (mainWindow && !mainWindow.isDestroyed()) return mainWindow.isMaximized();
+                return false;
+        });
+
+        // ---- Command confirmation ----
+        ipcMain.handle('prompt:confirmResponse', async (_event, command: string, approved: boolean) => {
+                resolveCommandConfirmation(command, approved);
         });
 }
 
@@ -493,6 +855,8 @@ function notifyPendingChanged(): void {
         sendToRenderer('pending:changed', pendingChangesService.pendingEntries.map(e => ({
                 filePath: e.uri.fsPath,
                 isNewFile: e.isNewFile,
+                originalContent: e.originalContent,
+                proposedContent: e.proposedContent,
                 proposedContentLength: e.proposedContent.length,
         })));
 }

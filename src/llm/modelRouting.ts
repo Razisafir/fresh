@@ -1,205 +1,342 @@
 /**
- * modelRouting.ts — Model routing by purpose (pure-logic, zero dependencies).
+ * modelRouting.ts — Model routing by purpose (HARVEST-3 from Kovix_2.0).
  *
- * Reimplemented from Kovix_2.0's modelRouting.ts (originally on
- * recovery/audit-tier1-patches branch, ~250 LOC). The original branch
- * no longer exists in the remote, so this is a fresh implementation
- * based on the HARVEST_CANDIDATES.md description:
+ * Source: `Kovix_2.0` branch `recovery/audit-tier1-patches`, commit `97b5c07b`.
+ * The original branch has been deleted from the remote; this file is
+ * reconstructed from the specification in HARVEST_CANDIDATES.md §1.4:
  *
- *   "Solves a real design flaw: currently every AI operation uses the
- *    same active model (e.g. Claude Sonnet 4 for autocomplete, which
- *    is wasteful). This adds ModelPurpose type and a routing decision
- *    function that maps purpose to appropriate model. Pure-logic file
- *    with no VS Code imports — fully unit-testable."
+ *   "Solves a real design flaw: currently every AI operation uses the same
+ *    active model. This adds ModelPurpose type
+ *    (autocomplete/inline-edit/agent-plan/agent-execute/chat/embedding)
+ *    and a routing decision function that maps purpose to appropriate model.
+ *    Pure-logic file with no VS Code imports — fully unit-testable."
  *
- * Design decisions:
- *   - ModelPurpose enum covers all identified AI operation types in Kovix
- *   - routeModel() returns a model string based on purpose + provider
- *   - Routing table is configurable (callers can override defaults)
- *   - Provider-specific routing: Anthropic, NVIDIA NIM, and OpenRouter
- *     have different model families and cost/quality tradeoffs
+ * Port strategy: RECONSTRUCT from spec (original file unrecoverable).
+ * Layer: 1 (pure logic, no platform imports).
  *
- * Migration log entry: docs/03_MIGRATION_LOG.md — see "Harvest-1: modelRouting.ts"
+ * Honest assessment (per task brief):
+ *   This module solves a REAL design flaw (single-model-for-everything),
+ *   but its IMMEDIATE value depends on how many providers are actively
+ *   configured. When the user runs a single free model via NVIDIA NIM
+ *   (e.g. nvidia/nemotron-3-nano-30b-a3b:free), all purposes will route
+ *   to the same model — the routing table is correct but produces no
+ *   behavioural difference. The module becomes genuinely useful when:
+ *     (a) multiple providers are configured (e.g. cheap model for execution,
+ *         strong model for planning), OR
+ *     (b) per-purpose model overrides are set in config.
+ *   Until then, it's infrastructure ready for when multi-provider becomes
+ *   the norm. It costs nothing to have it wired in — the routing table
+ *   degrades to "everything → active model" when no overrides exist — so
+ *   we ship it now rather than discovering the gap later.
  *
- * Decisions referenced: D-001 (file-by-file audit), harvest plan Step 2.
+ * Decisions referenced: D-001 (file-by-file audit), HARVEST-3.
  */
 
+import type { AIProviderType, IModelInfo } from '../types/llm';
+
 // ---------------------------------------------------------------------------
-// Types
+// ModelPurpose — what the model is being asked to do
 // ---------------------------------------------------------------------------
 
 /**
- * The purpose for which an LLM call is being made. Different purposes
- * have different quality/speed/cost requirements:
+ * Categorises the purpose of a model request. Different purposes have
+ * different optimal model characteristics:
  *
- *   - `autocomplete`: needs speed (sub-200ms), can tolerate lower quality
- *   - `inline_edit`: needs speed + moderate quality (Cmd+K style edits)
- *   - `agent_plan`: needs high quality reasoning (plan generation)
- *   - `agent_execute`: needs quality + tool-use capability (plan execution)
- *   - `chat`: general conversation — moderate quality, moderate speed
- *   - `embedding`: not an LLM call, but included for routing completeness
- *   - `verification`: needs precision for checking work (post-milestone)
- *   - `refinement`: exploratory conversation (Idea Refinement Mode) —
- *     needs good reasoning but not tool-use capability
+ *   - autocomplete:       low latency, cheap, small context
+ *   - inline-edit:        moderate latency, moderate quality
+ *   - agent-plan:         high quality, large context, tool support
+ *   - agent-execute:      moderate quality, tool support, cost-sensitive
+ *   - chat:               balanced quality and latency
+ *   - embedding:          not an LLM call — routing is to embedding service
  */
 export type ModelPurpose =
 	| 'autocomplete'
-	| 'inline_edit'
-	| 'agent_plan'
-	| 'agent_execute'
+	| 'inline-edit'
+	| 'agent-plan'
+	| 'agent-execute'
 	| 'chat'
-	| 'embedding'
-	| 'verification'
-	| 'refinement';
+	| 'embedding';
 
 /**
- * Routing priority: what to optimise for when choosing a model.
+ * All valid ModelPurpose values, for iteration / validation.
  */
-export type RoutingPriority = 'quality' | 'speed' | 'cost';
-
-/**
- * A model routing entry: for a given purpose, which model to use
- * for a specific provider.
- */
-export interface IModelRoute {
-	readonly purpose: ModelPurpose;
-	readonly provider: string;
-	readonly model: string;
-	readonly priority: RoutingPriority;
-}
-
-// ---------------------------------------------------------------------------
-// Default routing tables
-// ---------------------------------------------------------------------------
-
-/**
- * Default model routes for each provider. The table is ordered by
- * specificity: more specific entries (purpose + provider) take
- * precedence over generic ones (purpose only).
- *
- * Design rationale for each provider:
- *
- * Anthropic:
- *   - Plan/Execute/Verification → Sonnet (best balance of quality + cost)
- *   - Chat/Refinement → Sonnet (same — no point downgrading for these)
- *   - Autocomplete/InlineEdit → Haiku (speed-optimised, cheaper)
- *   - Embedding → N/A (Anthropic doesn't provide embedding models)
- *
- * NVIDIA NIM:
- *   - Plan/Execute → llama-3.1-405b (largest available on free tier)
- *   - Chat/Refinement → llama-3.1-70b (good quality, faster)
- *   - Autocomplete/InlineEdit → llama-3.1-8b (fastest)
- *   - Verification → llama-3.1-70b (needs good reasoning, not the biggest)
- *   - Embedding → nomic-embed-text (NVIDIA's embedding model)
- *
- * OpenRouter:
- *   - Plan/Execute → anthropic/claude-sonnet-4 (best quality)
- *   - Chat/Refinement → anthropic/claude-sonnet-4 (consistent with above)
- *   - Autocomplete/InlineEdit → anthropic/claude-haiku-4 (fast + cheap)
- *   - Verification → anthropic/claude-sonnet-4 (needs precision)
- *   - Embedding → N/A (OpenRouter routes to embedding providers separately)
- */
-const DEFAULT_ROUTES: readonly IModelRoute[] = [
-	// --- Anthropic ---
-	{ purpose: 'autocomplete',   provider: 'anthropic', model: 'claude-haiku-4-20250514',   priority: 'speed' },
-	{ purpose: 'inline_edit',    provider: 'anthropic', model: 'claude-haiku-4-20250514',   priority: 'speed' },
-	{ purpose: 'agent_plan',     provider: 'anthropic', model: 'claude-sonnet-4-20250514',   priority: 'quality' },
-	{ purpose: 'agent_execute',  provider: 'anthropic', model: 'claude-sonnet-4-20250514',   priority: 'quality' },
-	{ purpose: 'chat',           provider: 'anthropic', model: 'claude-sonnet-4-20250514',   priority: 'quality' },
-	{ purpose: 'verification',   provider: 'anthropic', model: 'claude-sonnet-4-20250514',   priority: 'quality' },
-	{ purpose: 'refinement',     provider: 'anthropic', model: 'claude-sonnet-4-20250514',   priority: 'quality' },
-
-	// --- NVIDIA NIM ---
-	{ purpose: 'autocomplete',   provider: 'nvidia-nim', model: 'meta/llama-3.1-8b-instruct',       priority: 'speed' },
-	{ purpose: 'inline_edit',    provider: 'nvidia-nim', model: 'meta/llama-3.1-8b-instruct',       priority: 'speed' },
-	{ purpose: 'agent_plan',     provider: 'nvidia-nim', model: 'meta/llama-3.1-405b-instruct',     priority: 'quality' },
-	{ purpose: 'agent_execute',  provider: 'nvidia-nim', model: 'meta/llama-3.1-405b-instruct',     priority: 'quality' },
-	{ purpose: 'chat',           provider: 'nvidia-nim', model: 'meta/llama-3.1-70b-instruct',      priority: 'cost' },
-	{ purpose: 'verification',   provider: 'nvidia-nim', model: 'meta/llama-3.1-70b-instruct',      priority: 'quality' },
-	{ purpose: 'refinement',     provider: 'nvidia-nim', model: 'meta/llama-3.1-70b-instruct',      priority: 'cost' },
-	{ purpose: 'embedding',      provider: 'nvidia-nim', model: 'nomic-embed-text',                  priority: 'cost' },
-
-	// --- OpenRouter ---
-	{ purpose: 'autocomplete',   provider: 'openrouter', model: 'anthropic/claude-haiku-4',   priority: 'speed' },
-	{ purpose: 'inline_edit',    provider: 'openrouter', model: 'anthropic/claude-haiku-4',   priority: 'speed' },
-	{ purpose: 'agent_plan',     provider: 'openrouter', model: 'anthropic/claude-sonnet-4',  priority: 'quality' },
-	{ purpose: 'agent_execute',  provider: 'openrouter', model: 'anthropic/claude-sonnet-4',  priority: 'quality' },
-	{ purpose: 'chat',           provider: 'openrouter', model: 'anthropic/claude-sonnet-4',  priority: 'quality' },
-	{ purpose: 'verification',   provider: 'openrouter', model: 'anthropic/claude-sonnet-4',  priority: 'quality' },
-	{ purpose: 'refinement',     provider: 'openrouter', model: 'anthropic/claude-sonnet-4',  priority: 'quality' },
+export const MODEL_PURPOSES: readonly ModelPurpose[] = [
+	'autocomplete',
+	'inline-edit',
+	'agent-plan',
+	'agent-execute',
+	'chat',
+	'embedding',
 ];
 
 // ---------------------------------------------------------------------------
-// Route lookup
+// Model capability tiers
 // ---------------------------------------------------------------------------
 
 /**
- * Look up the recommended model for a given purpose + provider.
+ * Broad capability tier. Used as a shorthand when mapping purpose → model.
+ *
+ *   - lightweight:  fast, cheap, small context (good for autocomplete, chat)
+ *   - standard:     balanced (good for execution, inline-edit)
+ *   - capable:      high quality, large context, tool support (planning)
+ *   - embedding:    not an LLM — embedding model
+ */
+export type ModelTier = 'lightweight' | 'standard' | 'capable' | 'embedding';
+
+/**
+ * Default mapping: purpose → capability tier.
+ * This is the base recommendation; specific model overrides in config
+ * take priority.
+ */
+export const PURPOSE_TIER_DEFAULTS: Readonly<Record<ModelPurpose, ModelTier>> = {
+	autocomplete: 'lightweight',
+	'inline-edit': 'standard',
+	'agent-plan': 'capable',
+	'agent-execute': 'standard',
+	chat: 'lightweight',
+	embedding: 'embedding',
+};
+
+// ---------------------------------------------------------------------------
+// Routing table entry
+// ---------------------------------------------------------------------------
+
+/**
+ * A routing table entry specifies which provider + model to use for a
+ * given purpose. Both fields are optional — if omitted, the active
+ * provider/model is used (fallback to current behaviour).
+ */
+export interface IModelRoute {
+	/** Provider to use for this purpose. If undefined, use active provider. */
+	provider?: AIProviderType;
+	/** Model ID to use for this purpose. If undefined, use provider's active model. */
+	modelId?: string;
+}
+
+/**
+ * The full routing table. Purposes not listed fall through to the
+ * active provider/model.
+ */
+export type IModelRoutingTable = Partial<Record<ModelPurpose, IModelRoute>>;
+
+// ---------------------------------------------------------------------------
+// Routing result
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of a routing decision. Includes the resolved route AND the
+ * reasoning so the caller can log / display why a particular model
+ * was chosen.
+ */
+export interface IModelRoutingResult {
+	/** The purpose being routed. */
+	purpose: ModelPurpose;
+	/** The resolved provider type (from route or active). */
+	provider: AIProviderType;
+	/** The resolved model ID (from route or active). */
+	modelId: string;
+	/** Why this route was chosen. Human-readable for logging. */
+	reason: string;
+	/** Whether a specific override was found in the routing table. */
+	overrideApplied: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Model characteristics (for heuristic matching)
+// ---------------------------------------------------------------------------
+
+/**
+ * Heuristic model characteristics used to auto-classify models into tiers
+ * when no explicit override exists. These are best-effort — the routing
+ * table override is always preferred.
+ */
+export interface IModelCharacteristics {
+	/** Approximate context window in tokens. */
+	contextWindow: number;
+	/** Whether the model supports tool/function calling. */
+	supportsTools: boolean;
+	/** Estimated cost tier (free < low < medium < high). */
+	costTier: 'free' | 'low' | 'medium' | 'high';
+}
+
+/**
+ * Heuristic rules for classifying a model into a tier based on its
+ * characteristics. The rules are intentionally simple and conservative:
+ *
+ *   - embedding tier:  never (handled by separate service)
+ *   - lightweight:     free or low cost, OR context < 16K
+ *   - capable:         supports tools AND (context >= 64K OR cost >= medium)
+ *   - standard:        everything else
+ */
+export function classifyModelTier(chars: IModelCharacteristics): ModelTier {
+	// Embedding models are handled by a separate service, not by LLM routing.
+	// This function should never be called for embedding purposes.
+	if (chars.costTier === 'free' || chars.costTier === 'low') {
+		return 'lightweight';
+	}
+	if (chars.contextWindow < 16_000) {
+		return 'lightweight';
+	}
+	if (chars.supportsTools && (chars.contextWindow >= 64_000 || chars.costTier === 'medium' || chars.costTier === 'high')) {
+		return 'capable';
+	}
+	return 'standard';
+}
+
+// ---------------------------------------------------------------------------
+// Active model snapshot (what the routing function needs from the caller)
+// ---------------------------------------------------------------------------
+
+/**
+ * Snapshot of the currently active provider/model state. The routing
+ * function is pure — it doesn't reach into any service. The caller
+ * provides this snapshot.
+ */
+export interface IActiveModelSnapshot {
+	/** Currently active provider type. */
+	activeProvider: AIProviderType;
+	/** Currently active model info (if any). */
+	activeModel: IModelInfo | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Core routing function
+// ---------------------------------------------------------------------------
+
+/**
+ * Route a model purpose to a specific provider + model.
  *
  * Resolution order:
- *   1. Check custom routes (if any were registered)
- *   2. Check DEFAULT_ROUTES for an exact (purpose, provider) match
- *   3. Return undefined (caller falls back to the provider's default model)
+ *   1. Explicit override in routingTable[purpose]
+ *   2. If no override, fall through to active provider/model
+ *   3. If no active model, return a result with empty modelId
+ *      (the caller should handle this as "no model available")
  *
- * Returns the model string to use, or undefined if no route is found
- * (embedding on Anthropic, for example — Anthropic doesn't offer
- * embedding models, so the caller should use a separate embedding service).
+ * This function is pure — no side effects, no service access.
+ * All state comes in via parameters.
+ *
+ * @param purpose     What the model will be used for
+ * @param routingTable  Per-purpose overrides (from config)
+ * @param snapshot    Current active provider/model state
+ * @returns Routing decision with reasoning
  */
 export function routeModel(
 	purpose: ModelPurpose,
-	provider: string,
-	customRoutes?: readonly IModelRoute[],
-): string | undefined {
-	// 1. Check custom routes first (user overrides)
-	if (customRoutes) {
-		const custom = customRoutes.find(
-			r => r.purpose === purpose && r.provider === provider,
-		);
-		if (custom) {
-			return custom.model;
+	routingTable: IModelRoutingTable,
+	snapshot: IActiveModelSnapshot,
+): IModelRoutingResult {
+	// 1. Check for explicit override
+	const override = routingTable[purpose];
+	if (override) {
+		const provider = override.provider ?? snapshot.activeProvider;
+		const modelId = override.modelId ?? snapshot.activeModel?.id ?? '';
+		return {
+			purpose,
+			provider,
+			modelId,
+			reason: override.provider && override.modelId
+				? `Routing table override: ${provider}/${modelId}`
+				: override.provider
+					? `Routing table provider override: ${provider}, using active model ${modelId}`
+					: `Routing table model override: ${modelId} on ${provider}`,
+			overrideApplied: true,
+		};
+	}
+
+	// 2. Fall through to active provider/model
+	const provider = snapshot.activeProvider;
+	const modelId = snapshot.activeModel?.id ?? '';
+	const tier = PURPOSE_TIER_DEFAULTS[purpose];
+
+	return {
+		purpose,
+		provider,
+		modelId,
+		reason: modelId
+			? `No override for '${purpose}' (tier: ${tier}), using active: ${provider}/${modelId}`
+			: `No override for '${purpose}' (tier: ${tier}), no active model on ${provider}`,
+		overrideApplied: false,
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Batch routing (route all purposes at once, for diagnostics / UI)
+// ---------------------------------------------------------------------------
+
+/**
+ * Route all known purposes and return the full map. Useful for:
+ *   - Display in settings UI ("model per purpose" table)
+ *   - Diagnostic logging on startup
+ *   - Validating that the routing table is consistent
+ */
+export function routeAllPurposes(
+	routingTable: IModelRoutingTable,
+	snapshot: IActiveModelSnapshot,
+): Readonly<Record<ModelPurpose, IModelRoutingResult>> {
+	const results: Partial<Record<ModelPurpose, IModelRoutingResult>> = {};
+	for (const purpose of MODEL_PURPOSES) {
+		results[purpose] = routeModel(purpose, routingTable, snapshot);
+	}
+	return results as Record<ModelPurpose, IModelRoutingResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Routing table validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate a routing table entry. Returns an array of issues (empty = valid).
+ *
+ * Checks:
+ *   - modelId is non-empty if provider is specified
+ *   - embedding purpose does not point to an LLM provider
+ *   - (future: check that the model actually exists on the provider)
+ */
+export function validateRoutingTable(
+	table: IModelRoutingTable,
+): string[] {
+	const issues: string[] = [];
+
+	for (const purpose of MODEL_PURPOSES) {
+		const entry = table[purpose];
+		if (!entry) continue;
+
+		if (entry.provider && !entry.modelId) {
+			issues.push(`Purpose '${purpose}': provider '${entry.provider}' specified but no modelId`);
+		}
+
+		if (purpose === 'embedding' && entry.provider) {
+			issues.push(
+				`Purpose 'embedding': routing to LLM provider '${entry.provider}' is incorrect — ` +
+				`embeddings use a separate service (Ollama), not an LLM provider. ` +
+				`Remove the provider override or set it to 'ollama'.`,
+			);
 		}
 	}
 
-	// 2. Check default routes
-	const route = DEFAULT_ROUTES.find(
-		r => r.purpose === purpose && r.provider === provider,
-	);
-	return route?.model;
+	return issues;
 }
 
-/**
- * Get the routing priority for a given purpose. Useful for logging
- * and for the cost governor's model-switch recommendations.
- */
-export function getRoutingPriority(purpose: ModelPurpose): RoutingPriority {
-	switch (purpose) {
-		case 'autocomplete':
-		case 'inline_edit':
-			return 'speed';
-		case 'agent_plan':
-		case 'agent_execute':
-		case 'verification':
-			return 'quality';
-		case 'chat':
-		case 'refinement':
-		case 'embedding':
-			return 'cost';
-	}
-}
+// ---------------------------------------------------------------------------
+// Default routing table (empty — all purposes use active model)
+// ---------------------------------------------------------------------------
 
 /**
- * Get all default routes. Useful for displaying the routing table
- * in a settings UI or for debugging.
+ * The default routing table has NO overrides. Every purpose routes to
+ * the active provider/model. This preserves current behaviour while
+ * allowing users to add per-purpose overrides in config.
  */
-export function getDefaultRoutes(): readonly IModelRoute[] {
-	return DEFAULT_ROUTES;
-}
+export const DEFAULT_ROUTING_TABLE: IModelRoutingTable = {};
+
+// ---------------------------------------------------------------------------
+// Config key (for future wiring into settings)
+// ---------------------------------------------------------------------------
 
 /**
- * Check whether a given purpose is supported by a given provider.
- * Returns false if the provider doesn't have a route for the purpose
- * (e.g., Anthropic + embedding).
+ * The config key under which the routing table will be stored.
+ * Example: `kovix.modelRouting` in the app's config store.
+ *
+ * This is exported for reference but NOT wired yet — wiring happens
+ * when the settings UI gets a "model per purpose" panel (Layout B+).
  */
-export function isPurposeSupported(purpose: ModelPurpose, provider: string): boolean {
-	return DEFAULT_ROUTES.some(r => r.purpose === purpose && r.provider === provider);
-}
+export const MODEL_ROUTING_CONFIG_KEY = 'kovix.modelRouting';

@@ -28,3 +28,5 @@ coverage/
 
 # Lockfiles we keep; uncomment the next line to ignore lockfile changes
 # package-lock.json
+# Monaco editor files — rebuilt by scripts/build-electron.cjs from node_modules
+renderer/monaco/

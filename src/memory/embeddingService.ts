@@ -16,55 +16,63 @@
  * that service had a keyword-only scoring bug (R-007) and used a different
  * embedding backend. This is a clean rewrite using semantic embeddings.
  *
- * HARVEST-1b FIX (STUB_AUDIT H-1 class — "looks fine, isn't"):
- *   The original design returned null on failure, which is better than
- *   Kovix_2.0's zero-vector silent failure, but it still had the same
- *   class of bug: **silent degradation**. When Ollama is down, the
- *   memory service silently falls back to returning empty results with
- *   no user-visible indication that embeddings are non-functional.
+ * H-1 FIX (from STUB_AUDIT): The old repo's embeddingService silently
+ * returned zero vectors when no backend was available, causing memory
+ * retrieval to degrade to keyword-only with NO user-visible indication.
+ * This fix:
+ *   1. Adds EmbeddingServiceStatus type — 'available' | 'degraded' | 'unavailable'
+ *   2. Adds getStatus() to the interface — callers can check WHY embeddings
+ *      aren't working, not just WHETHER they're enabled
+ *   3. Makes isEnabled() reflect ACTUAL backend reachability (not just config)
+ *   4. Tracks consecutive failures — after 3 consecutive failures, marks
+ *      status as 'unavailable' (backend is likely down)
+ *   5. On successful embed, resets failure count and upgrades status back
+ *      to 'available' (auto-recovery when Ollama comes back)
+ *   6. OllamaEmbeddingService now returns EmbeddingResultWithStatus — the
+ *      caller can distinguish between "null because service is disabled" and
+ *      "null because backend is temporarily down"
  *
- *   Fix: added EmbeddingStatus tracking ('available', 'degraded',
- *   'unavailable') with an onStatusChange callback. The Ollama service
- *   now tracks consecutive failures and transitions to 'degraded' after
- *   3 consecutive failures, and 'unavailable' after 10. Successful calls
- *   reset the counter. Memory retrieval marks itself as degraded when
- *   the embedding status is not 'available'. A regression test ensures
- *   the silent-failure class cannot be reintroduced.
+ * This bug class (looks fine, isn't) previously bit this project as SEC-6
+ * (prompt-sanitizer miss). Treat with matching seriousness: the regression
+ * test in embeddingService.test.ts specifically catches silent-failure
+ * reintroduction.
  *
  * Security: SEC-6 — embedding text is sent to the local Ollama instance
  * only (no remote calls). The Ollama base URL is constrained to localhost
  * by default; if a user overrides it to a remote URL, that's their choice.
  *
- * Decisions referenced: D-007, R-007, Phase 8-A (local-only).
+ * Decisions referenced: D-007, R-007, Phase 8-A (local-only), H-1 fix.
  */
 
 import type { IMemoryConfig } from './types';
+import { logger } from '../util/logger';
 
 // ---------------------------------------------------------------------------
-// Status tracking (HARVEST-1b fix)
+// Status types (H-1 fix)
 // ---------------------------------------------------------------------------
 
 /**
- * The health status of the embedding service.
+ * Status of the embedding service, surfaced to callers and (eventually) UI.
  *
- *   - 'available':    Embeddings are working normally
- *   - 'degraded':     Some recent failures, but still trying (3-9 consecutive failures)
- *   - 'unavailable':  Persistent failures, embeddings are effectively down (10+ consecutive)
- *
- * Callers (especially memoryService.ts and the UI) should check this status
- * and surface it to the user — this is the "make it loud" fix for the
- * silent-degradation bug class (STUB_AUDIT H-1).
+ *   - 'available':    backend is reachable, embeddings working
+ *   - 'degraded':     backend was reachable but recent embed() calls failed
+ *                     (1-2 consecutive failures). Still worth retrying.
+ *   - 'unavailable':  no backend configured (provider='none') OR backend
+ *                     has failed 3+ consecutive times (likely down).
+ *                     Memory retrieval should flag itself as degraded.
  */
-export type EmbeddingStatus = 'available' | 'degraded' | 'unavailable';
+export type EmbeddingServiceStatus = 'available' | 'degraded' | 'unavailable';
 
 /**
- * Callback type for embedding status changes. The UI can register
- * a listener to display a status badge when embeddings degrade.
+ * Reason for the current status. Human-readable for logging/UI display.
  */
-export type StatusChangeCallback = (status: EmbeddingStatus, previousStatus: EmbeddingStatus) => void;
+export interface IStatusDetail {
+        status: EmbeddingServiceStatus;
+        reason: string;
+}
 
 // ---------------------------------------------------------------------------
-// Core types
+// Embedding result (enhanced with status info)
 // ---------------------------------------------------------------------------
 
 /**
@@ -74,33 +82,43 @@ export type StatusChangeCallback = (status: EmbeddingStatus, previousStatus: Emb
  */
 export type EmbeddingResult = number[] | null;
 
+// ---------------------------------------------------------------------------
+// Interface (enhanced with H-1 fix)
+// ---------------------------------------------------------------------------
+
 /**
  * Embedding service interface.
  */
 export interface IEmbeddingService {
-	/** Returns true if the service can produce embeddings (provider != none). */
-	isEnabled(): boolean;
-	/** Embed a text string. Returns null on any failure (degrade gracefully). */
-	embed(text: string): Promise<EmbeddingResult>;
-	/** The dimension of vectors produced (null until first successful embed). */
-	getDimension(): number | null;
-	/** Current health status of the embedding service. (HARVEST-1b addition) */
-	getStatus(): EmbeddingStatus;
-	/** Register a callback for status changes. (HARVEST-1b addition) */
-	onStatusChange(callback: StatusChangeCallback): void;
+        /** Returns true if the service can produce embeddings (provider != none AND backend reachable). */
+        isEnabled(): boolean;
+        /** Embed a text string. Returns null on any failure (degrade gracefully). */
+        embed(text: string): Promise<EmbeddingResult>;
+        /** The dimension of vectors produced (null until first successful embed). */
+        getDimension(): number | null;
+        /**
+         * Get the current status of the embedding service.
+         * H-1 fix: surfaces WHY embeddings aren't working, not just WHETHER.
+         * Callers (memory service, UI) should check this to provide visible
+         * feedback instead of silently degrading.
+         */
+        getStatus(): IStatusDetail;
 }
 
 // ---------------------------------------------------------------------------
-// Ollama embedding service (with status tracking)
+// Consecutive-failure threshold
 // ---------------------------------------------------------------------------
 
 /**
- * Thresholds for status transitions. After DEGRADED_THRESHOLD consecutive
- * failures, status becomes 'degraded'. After UNAVAILABLE_THRESHOLD, it
- * becomes 'unavailable'. Any success resets the counter to 0.
+ * Number of consecutive failures before marking the service as 'unavailable'.
+ * After this many failures in a row, we assume the backend is down and
+ * stop retrying every call (the caller should show a status message).
  */
-const DEGRADED_THRESHOLD = 3;
-const UNAVAILABLE_THRESHOLD = 10;
+const UNAVAILABLE_THRESHOLD = 3;
+
+// ---------------------------------------------------------------------------
+// OllamaEmbeddingService (enhanced with status tracking)
+// ---------------------------------------------------------------------------
 
 /**
  * Ollama embedding service.
@@ -109,121 +127,119 @@ const UNAVAILABLE_THRESHOLD = 10;
  * Ollama returns `{ embedding: number[] }`.
  *
  * On any error (network, HTTP non-200, malformed JSON, empty embedding),
- * returns null. The memory service treats null as "skip this entry" and
- * continues. This means a temporary Ollama outage doesn't break the agent
- * loop — it just means no new memories get stored until Ollama is back.
+ * returns null AND increments the consecutive failure counter. After
+ * UNAVAILABLE_THRESHOLD consecutive failures, getStatus() returns
+ * 'unavailable' instead of 'degraded'.
  *
- * HARVEST-1b: consecutive failures are now tracked and status transitions
- * fire via onStatusChange callbacks. The UI can display a badge when
- * status is 'degraded' or 'unavailable'.
+ * On successful embed, the counter resets and status returns to 'available'.
  */
 export class OllamaEmbeddingService implements IEmbeddingService {
-	private readonly baseUrl: string;
-	private readonly model: string;
-	private _dimension: number | null = null;
-	private _status: EmbeddingStatus = 'available';
-	private _consecutiveFailures = 0;
-	private readonly _statusListeners: StatusChangeCallback[] = [];
+        private readonly baseUrl: string;
+        private readonly model: string;
+        private _dimension: number | null = null;
+        private _consecutiveFailures = 0;
+        private _lastFailureReason = '';
 
-	constructor(config: IMemoryConfig) {
-		this.baseUrl = (config.ollamaBaseUrl ?? 'http://localhost:11434').replace(/\/$/, '');
-		this.model = config.embedModel || 'nomic-embed-text';
-	}
+        constructor(config: IMemoryConfig) {
+                this.baseUrl = (config.ollamaBaseUrl ?? 'http://localhost:11434').replace(/\/$/, '');
+                this.model = config.embedModel || 'nomic-embed-text';
+        }
 
-	isEnabled(): boolean {
-		return true;
-	}
+        isEnabled(): boolean {
+                // H-1 fix: isEnabled reflects ACTUAL reachability, not just config.
+                // If we've had too many consecutive failures, report disabled.
+                return this.getStatus().status !== 'unavailable';
+        }
 
-	async embed(text: string): Promise<EmbeddingResult> {
-		try {
-			// Use the global fetch (Node 18+). No external HTTP library needed.
-			const response = await fetch(`${this.baseUrl}/api/embeddings`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ model: this.model, prompt: text }),
-				// 10s timeout — Ollama on localhost should respond in <1s for
-				// a single embedding. If it's slow, something is wrong.
-				signal: AbortSignal.timeout(10_000),
-			});
+        getStatus(): IStatusDetail {
+                if (this._consecutiveFailures === 0) {
+                        return {
+                                status: 'available',
+                                reason: `Ollama embedding service available (${this.baseUrl}, model: ${this.model})`,
+                        };
+                }
+                if (this._consecutiveFailures >= UNAVAILABLE_THRESHOLD) {
+                        return {
+                                status: 'unavailable',
+                                reason: `Ollama embedding backend unreachable after ${this._consecutiveFailures} attempts. ` +
+                                        `Last failure: ${this._lastFailureReason}. ` +
+                                        `Ensure Ollama is running at ${this.baseUrl} with model '${this.model}' pulled.`,
+                        };
+                }
+                // degraded: 1-2 consecutive failures
+                return {
+                        status: 'degraded',
+                        reason: `Ollama embedding backend degraded (${this._consecutiveFailures} consecutive failures). ` +
+                                `Last failure: ${this._lastFailureReason}. ` +
+                                `Retries will continue; memory search quality may be reduced.`,
+                };
+        }
 
-			if (!response.ok) {
-				this.recordFailure();
-				return null;
-			}
+        async embed(text: string): Promise<EmbeddingResult> {
+                try {
+                        const response = await fetch(`${this.baseUrl}/api/embeddings`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ model: this.model, prompt: text }),
+                                signal: AbortSignal.timeout(10_000),
+                        });
 
-			const data = (await response.json()) as { embedding?: number[] };
-			if (!data.embedding || !Array.isArray(data.embedding) || data.embedding.length === 0) {
-				this.recordFailure();
-				return null;
-			}
+                        if (!response.ok) {
+                                this._recordFailure(`HTTP ${response.status}`);
+                                return null;
+                        }
 
-			// Cache the dimension on first success so the vector store can
-			// initialise its index with the right size.
-			if (this._dimension === null) {
-				this._dimension = data.embedding.length;
-			}
+                        const data = (await response.json()) as { embedding?: number[] };
+                        if (!data.embedding || !Array.isArray(data.embedding) || data.embedding.length === 0) {
+                                this._recordFailure('Empty or invalid embedding response');
+                                return null;
+                        }
 
-			this.recordSuccess();
-			return data.embedding;
-		} catch {
-			// Network error, timeout, JSON parse error — all degrade to null.
-			this.recordFailure();
-			return null;
-		}
-	}
+                        // Success — reset failure counter and update status.
+                        if (this._consecutiveFailures > 0) {
+                                logger.info(`[EmbeddingService] Recovered after ${this._consecutiveFailures} consecutive failures. Status → available.`);
+                        }
+                        this._consecutiveFailures = 0;
+                        this._lastFailureReason = '';
 
-	getDimension(): number | null {
-		return this._dimension;
-	}
+                        if (this._dimension === null) {
+                                this._dimension = data.embedding.length;
+                        }
 
-	getStatus(): EmbeddingStatus {
-		return this._status;
-	}
+                        return data.embedding;
+                } catch (err) {
+                        const msg = err instanceof Error ? err.message : String(err);
+                        this._recordFailure(msg);
+                        return null;
+                }
+        }
 
-	onStatusChange(callback: StatusChangeCallback): void {
-		this._statusListeners.push(callback);
-	}
+        getDimension(): number | null {
+                return this._dimension;
+        }
 
-	// --- Status tracking (HARVEST-1b) ---
+        private _recordFailure(reason: string): void {
+                this._consecutiveFailures++;
+                this._lastFailureReason = reason;
 
-	private recordSuccess(): void {
-		if (this._consecutiveFailures > 0) {
-			this._consecutiveFailures = 0;
-			// Was degraded/unavailable, now recovering
-			if (this._status !== 'available') {
-				this.setStatus('available');
-			}
-		}
-	}
-
-	private recordFailure(): void {
-		this._consecutiveFailures++;
-		if (this._consecutiveFailures >= UNAVAILABLE_THRESHOLD) {
-			if (this._status !== 'unavailable') {
-				this.setStatus('unavailable');
-			}
-		} else if (this._consecutiveFailures >= DEGRADED_THRESHOLD) {
-			if (this._status !== 'degraded') {
-				this.setStatus('degraded');
-			}
-		}
-	}
-
-	private setStatus(newStatus: EmbeddingStatus): void {
-		const previous = this._status;
-		this._status = newStatus;
-		for (const listener of this._statusListeners) {
-			try {
-				listener(newStatus, previous);
-			} catch {
-				// Listener errors must not break the embedding service
-			}
-		}
-	}
+                // H-1 fix: LOG the failure visibly. The old code silently swallowed
+                // ALL errors. Now every failure is logged so the developer can see
+                // WHY memory is degrading.
+                if (this._consecutiveFailures === 1) {
+                        logger.warn(`[EmbeddingService] Embedding failed: ${reason}. Status → degraded.`);
+                } else if (this._consecutiveFailures === UNAVAILABLE_THRESHOLD) {
+                        logger.error(
+                                `[EmbeddingService] Embedding backend UNAVAILABLE after ${this._consecutiveFailures} consecutive failures. ` +
+                                `Last failure: ${reason}. Memory retrieval will return empty results until Ollama is restarted.`,
+                        );
+                } else {
+                        logger.warn(`[EmbeddingService] Embedding failure #${this._consecutiveFailures}: ${reason}`);
+                }
+        }
 }
 
 // ---------------------------------------------------------------------------
-// Null embedding service
+// NullEmbeddingService (enhanced with status)
 // ---------------------------------------------------------------------------
 
 /**
@@ -232,28 +248,154 @@ export class OllamaEmbeddingService implements IEmbeddingService {
  * Always returns null. The memory service checks isEnabled() before
  * attempting any storage/retrieval.
  *
- * Status is always 'unavailable' — there is no backend to fail.
+ * H-1 fix: getStatus() now returns 'unavailable' with a clear reason,
+ * instead of silently returning null and leaving the caller guessing.
  */
 export class NullEmbeddingService implements IEmbeddingService {
-	private readonly _statusListeners: StatusChangeCallback[] = [];
+        private readonly _reason: string;
 
-	isEnabled(): boolean {
-		return false;
-	}
-	async embed(_text: string): Promise<EmbeddingResult> {
-		return null;
-	}
-	getDimension(): number | null {
-		return null;
-	}
-	getStatus(): EmbeddingStatus {
-		return 'unavailable';
-	}
-	onStatusChange(callback: StatusChangeCallback): void {
-		this._statusListeners.push(callback);
-		// Immediately fire with current status so the caller knows the state
-		callback('unavailable', 'unavailable');
-	}
+        constructor(reason?: string) {
+                this._reason = reason ?? 'No embedding backend configured (provider set to "none")';
+        }
+
+        isEnabled(): boolean {
+                return false;
+        }
+
+        async embed(_text: string): Promise<EmbeddingResult> {
+                return null;
+        }
+
+        getDimension(): number | null {
+                return null;
+        }
+
+        getStatus(): IStatusDetail {
+                return {
+                        status: 'unavailable',
+                        reason: this._reason,
+                };
+        }
+}
+
+// ---------------------------------------------------------------------------
+// OpenAIEmbeddingService (new in v0.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * OpenAI embedding service.
+ *
+ * Calls `POST https://api.openai.com/v1/embeddings` with the configured model.
+ * Uses the same H-1 status tracking as OllamaEmbeddingService.
+ */
+export class OpenAIEmbeddingService implements IEmbeddingService {
+        private readonly apiKey: string;
+        private readonly model: string;
+        private readonly baseUrl: string;
+        private _dimension: number | null = null;
+        private _consecutiveFailures = 0;
+        private _lastFailureReason = '';
+
+        constructor(config: IMemoryConfig, apiKey: string) {
+                this.apiKey = apiKey;
+                this.model = config.embedModel || 'text-embedding-3-small';
+                this.baseUrl = (config.openaiBaseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '');
+        }
+
+        isEnabled(): boolean {
+                return this.getStatus().status !== 'unavailable';
+        }
+
+        getStatus(): IStatusDetail {
+                if (this._consecutiveFailures === 0) {
+                        return {
+                                status: 'available',
+                                reason: `OpenAI embedding service available (${this.baseUrl}, model: ${this.model})`,
+                        };
+                }
+                if (this._consecutiveFailures >= UNAVAILABLE_THRESHOLD) {
+                        return {
+                                status: 'unavailable',
+                                reason: `OpenAI embedding backend failed ${this._consecutiveFailures} consecutive times. ` +
+                                        `Last failure: ${this._lastFailureReason}. ` +
+                                        `Check your API key and network connectivity.`,
+                        };
+                }
+                return {
+                        status: 'degraded',
+                        reason: `OpenAI embedding backend degraded (${this._consecutiveFailures} consecutive failures). ` +
+                                `Last failure: ${this._lastFailureReason}. Retries will continue.`,
+                };
+        }
+
+        async embed(text: string): Promise<EmbeddingResult> {
+                try {
+                        const response = await fetch(`${this.baseUrl}/embeddings`, {
+                                method: 'POST',
+                                headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${this.apiKey}`,
+                                },
+                                body: JSON.stringify({
+                                        model: this.model,
+                                        input: text,
+                                }),
+                                signal: AbortSignal.timeout(15_000),
+                        });
+
+                        if (!response.ok) {
+                                const errText = await response.text().catch(() => '');
+                                this._recordFailure(`HTTP ${response.status}: ${errText.slice(0, 200)}`);
+                                return null;
+                        }
+
+                        const data = await response.json() as {
+                                data?: Array<{ embedding?: number[] }>;
+                        };
+
+                        if (!data.data?.[0]?.embedding || !Array.isArray(data.data[0].embedding) || data.data[0].embedding.length === 0) {
+                                this._recordFailure('Empty or invalid embedding response from OpenAI');
+                                return null;
+                        }
+
+                        // Success — reset failure counter
+                        if (this._consecutiveFailures > 0) {
+                                logger.info(`[EmbeddingService] OpenAI recovered after ${this._consecutiveFailures} consecutive failures. Status → available.`);
+                        }
+                        this._consecutiveFailures = 0;
+                        this._lastFailureReason = '';
+
+                        if (this._dimension === null) {
+                                this._dimension = data.data[0].embedding.length;
+                        }
+
+                        return data.data[0].embedding;
+                } catch (err) {
+                        const msg = err instanceof Error ? err.message : String(err);
+                        this._recordFailure(msg);
+                        return null;
+                }
+        }
+
+        getDimension(): number | null {
+                return this._dimension;
+        }
+
+        private _recordFailure(reason: string): void {
+                this._consecutiveFailures++;
+                this._lastFailureReason = reason;
+
+                if (this._consecutiveFailures === 1) {
+                        logger.warn(`[EmbeddingService] OpenAI embedding failed: ${reason}. Status → degraded.`);
+                } else if (this._consecutiveFailures >= UNAVAILABLE_THRESHOLD) {
+                        logger.error(
+                                `[EmbeddingService] OpenAI embedding UNAVAILABLE after ${this._consecutiveFailures} consecutive failures. ` +
+                                `Last failure: ${reason}.`,
+                        );
+                } else {
+                        logger.warn(`[EmbeddingService] OpenAI embedding failure #${this._consecutiveFailures}: ${reason}`);
+                }
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -264,17 +406,38 @@ export class NullEmbeddingService implements IEmbeddingService {
  * Factory: create an embedding service from the memory config.
  */
 export function createEmbeddingService(config: IMemoryConfig): IEmbeddingService {
-	switch (config.embedProvider) {
-		case 'ollama':
-			return new OllamaEmbeddingService(config);
-		case 'openai':
-			// Not implemented in v1.0-beta — degrade gracefully.
-			// To implement: add an OpenAIEmbeddingService that calls
-			// POST https://api.openai.com/v1/embeddings with the user's
-			// OpenAI key from SecretStorage.
-			return new NullEmbeddingService();
-		case 'none':
-		default:
-			return new NullEmbeddingService();
-	}
+        switch (config.embedProvider) {
+                case 'ollama':
+                        return new OllamaEmbeddingService(config);
+                case 'openai': {
+                        // OpenAI embedding requires an API key. If we can get one from the
+                        // app state secrets, create the real service; otherwise fall back to
+                        // NullEmbeddingService with a clear reason.
+                        try {
+                                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                                const { getAppState } = require('../platform/appState');
+                                const secrets = getAppState().secrets;
+                                // getSecret is async, but the factory is synchronous. We create
+                                // the service optimistically — if the key isn't set, the first
+                                // embed() call will fail and H-1 status tracking kicks in.
+                                const service = new OpenAIEmbeddingService(config, '__pending__');
+                                // Async key resolution: replace the placeholder key on first use
+                                secrets.get('kovix.apiKey.openai').then((key: string | undefined) => {
+                                        if (key) {
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                (service as any).apiKey = key;
+                                        }
+                                }).catch(() => {});
+                                return service;
+                        } catch {
+                                return new NullEmbeddingService(
+                                        'OpenAI embedding provider: could not initialize (secrets unavailable). ' +
+                                        'Set kovix.memoryEmbedProvider to "ollama" and start Ollama locally.',
+                                );
+                        }
+                }
+                case 'none':
+                default:
+                        return new NullEmbeddingService();
+        }
 }

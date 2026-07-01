@@ -567,26 +567,17 @@ export class OpenRouterProvider implements IConstructAIProvider, Disposable {
                                 },
                         });
                         if (response.ok) {
-                                const data = await response.json() as {
-                                        data: Array<{
-                                                id: string;
-                                                context_length?: number;
-                                                supported_parameters?: string[];
-                                        }>;
-                                };
+                                const data = await response.json() as { data: Array<{ id: string; context_length?: number }> };
                                 this._cachedModels = data.data
                                         .filter(m => m.id && !m.id.includes('embed') && !m.id.includes('retrieval'))
-                                        .map(m => {
-                                                const supportsTools = m.supported_parameters?.includes('tools') ?? false;
-                                                return {
-                                                        id: m.id,
-                                                        displayName: m.id.split('/').pop() ?? m.id,
-                                                        provider: 'openrouter' as AIProviderType,
-                                                        contextWindowTokens: m.context_length ?? estimateContextWindow(m.id),
-                                                        supportsTools,
-                                                        supportsStreaming: true,
-                                                };
-                                        });
+                                        .map(m => ({
+                                                id: m.id,
+                                                displayName: m.id.split('/').pop() ?? m.id,
+                                                provider: 'openrouter' as AIProviderType,
+                                                contextWindowTokens: m.context_length ?? estimateContextWindow(m.id),
+                                                supportsTools: true,
+                                                supportsStreaming: true,
+                                        }));
                                 return this._cachedModels;
                         }
                 } catch {
