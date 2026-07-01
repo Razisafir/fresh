@@ -22,7 +22,7 @@
     "test:unit": "tsc -p tsconfig.test.json --noEmit && node scripts/run-tests.cjs 'test/unit/**/*.test.ts'",
     "test:integration": "tsc -p tsconfig.test.json --noEmit && node scripts/run-tests.cjs 'test/integration/**/*.test.ts'",
     "smoke": "node scripts/smoke-test.cjs",
-    "dist": "electron-builder"
+    "dist": "npm run compile && electron-builder"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
@@ -53,6 +53,8 @@
   "build": {
     "appId": "com.kovix.desktop",
     "productName": "Kovix",
+    "asar": true,
+    "asarUnpack": ["**/*.node"],
     "directories": {
       "output": "release"
     },

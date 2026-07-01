@@ -7,6 +7,8 @@
  * State machine: idle → planning → awaiting_approval → executing → complete
  */
 
+/* global DOMPurify */
+
 // ---------------------------------------------------------------------------
 // API handle
 // ---------------------------------------------------------------------------
@@ -99,13 +101,21 @@ function renderMarkdown(text) {
     // Numbered lists
     .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
     // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
     // Paragraphs (double newline)
     .replace(/\n\n/g, '</p><p>')
     // Single newlines within paragraphs
     .replace(/\n/g, '<br>');
   // Wrap loose <li> in <ul>
   html = html.replace(/(<li>.*?<\/li>)+/gs, '<ul>$&</ul>');
+  // SECURITY: Sanitize HTML to prevent XSS from LLM output
+  if (typeof DOMPurify !== 'undefined') {
+    html = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'h2', 'h3', 'h4', 'pre', 'code', 'ul', 'li', 'a'],
+      ALLOWED_ATTR: ['href', 'target', 'rel'],
+      ALLOW_DATA_ATTR: false,
+    });
+  }
   return '<p>' + html + '</p>';
 }
 

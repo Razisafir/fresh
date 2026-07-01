@@ -49,6 +49,19 @@ let _activeAbortController: AbortController | null = null;
 // App lifecycle
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Global error handlers (production hardening)
+// ---------------------------------------------------------------------------
+
+process.on('uncaughtException', (err: Error) => {
+        logger.error(`[Main] Uncaught exception: ${err.message}\n${err.stack ?? ''}`);
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+        const msg = reason instanceof Error ? `${reason.message}\n${reason.stack ?? ''}` : String(reason);
+        logger.error(`[Main] Unhandled rejection: ${msg}`);
+});
+
 app.whenReady().then(async () => {
         logger.info('Kovix starting up (Electron standalone — Phase 0 pivot, D-015).');
 
@@ -171,7 +184,7 @@ function createWindow(): void {
                         preload: path.join(__dirname, 'preload.js'),
                         contextIsolation: true,
                         nodeIntegration: false,
-                        sandbox: false,
+                        sandbox: true,
                 },
         });
 
@@ -237,7 +250,15 @@ function registerIpcHandlers(): void {
         });
 
         // ---- Secrets ----
+        ipcMain.handle('secrets:has', async (_event, key: string) => {
+                if (!isAppStateInitialized()) return false;
+                const value = await getAppState().secrets.get(key);
+                return value !== undefined && value !== null && value !== '';
+        });
+
         ipcMain.handle('secrets:get', async (_event, key: string) => {
+                // SECURITY: Only expose secrets to renderer for provider key setup.
+                // Consider migrating to secrets:has + main-process-only usage.
                 if (!isAppStateInitialized()) return undefined;
                 return getAppState().secrets.get(key);
         });
@@ -606,6 +627,9 @@ function registerIpcHandlers(): void {
         });
 
         ipcMain.handle('credits:add', async (_event: Electron.IpcMainInvokeEvent, amount: number) => {
+                if (typeof amount !== 'number' || amount <= 0) {
+                        return { error: 'amount must be a positive number' };
+                }
                 getCreditSystem().addCredits(amount);
                 return { success: true };
         });
@@ -644,43 +668,53 @@ function registerIpcHandlers(): void {
         });
 
         ipcMain.handle('git:stage', async (_event, repoPath: string, filePaths: string[]) => {
-                await gitService.stage(repoPath, filePaths);
+                try { await gitService.stage(repoPath, filePaths); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:unstage', async (_event, repoPath: string, filePaths: string[]) => {
-                await gitService.unstage(repoPath, filePaths);
+                try { await gitService.unstage(repoPath, filePaths); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:commit', async (_event, repoPath: string, message: string) => {
-                return await gitService.commit(repoPath, message);
+                try { return await gitService.commit(repoPath, message); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string) => {
-                await gitService.checkout(repoPath, branch);
+                try { await gitService.checkout(repoPath, branch); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:createBranch', async (_event, repoPath: string, name: string, checkout?: boolean) => {
-                await gitService.createBranch(repoPath, name, checkout);
+                try { await gitService.createBranch(repoPath, name, checkout); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:deleteBranch', async (_event, repoPath: string, name: string, force?: boolean) => {
-                await gitService.deleteBranch(repoPath, name, force);
+                try { await gitService.deleteBranch(repoPath, name, force); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:pull', async (_event, repoPath: string, remote?: string, branch?: string) => {
-                return await gitService.pull(repoPath, remote, branch);
+                try { return await gitService.pull(repoPath, remote, branch); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:push', async (_event, repoPath: string, remote?: string, branch?: string) => {
-                await gitService.push(repoPath, remote, branch);
+                try { await gitService.push(repoPath, remote, branch); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:stash', async (_event, repoPath: string, message?: string) => {
-                await gitService.stash(repoPath, message);
+                try { await gitService.stash(repoPath, message); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:stashPop', async (_event, repoPath: string) => {
-                await gitService.stashPop(repoPath);
+                try { await gitService.stashPop(repoPath); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string) => {
@@ -701,36 +735,51 @@ function registerIpcHandlers(): void {
 
         // ---- Conversation store ----
         ipcMain.handle('conversation:list', async () => {
-                return await getConversationStore().listConversations();
+                try { return await getConversationStore().listConversations(); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:load', async (_event, id: string) => {
-                return await getConversationStore().loadConversation(id);
+                try { return await getConversationStore().loadConversation(id); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:create', async (_event, title?: string) => {
-                return await getConversationStore().createConversation(title);
+                try { return await getConversationStore().createConversation(title); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:delete', async (_event, id: string) => {
-                await getConversationStore().deleteConversation(id);
+                try { await getConversationStore().deleteConversation(id); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:getActive', async () => {
-                return await getConversationStore().getActiveConversation();
+                try { return await getConversationStore().getActiveConversation(); }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:setActive', async (_event, id: string) => {
-                await getConversationStore().setActiveConversation(id);
+                try { await getConversationStore().setActiveConversation(id); return { success: true }; }
+                catch (e) { return { error: (e as Error).message }; }
         });
 
         ipcMain.handle('conversation:addMessage', async (_event, conversationId: string, message: unknown) => {
-                const stored = message as import('../src/memory/conversationStore').IStoredMessage;
-                const chatMsg: import('../src/types/llm').IChatMessage = {
-                        role: stored.role as 'user' | 'assistant' | 'system',
-                        content: stored.content,
-                };
-                await getConversationStore().addMessage(conversationId, chatMsg);
+                try {
+                        const stored = message as Record<string, unknown>;
+                        const validRoles = ['user', 'assistant', 'system'] as const;
+                        const role = validRoles.includes(stored.role as typeof validRoles[number])
+                                ? stored.role as 'user' | 'assistant' | 'system'
+                                : 'user'; // Safe default
+                        const chatMsg: import('../src/types/llm').IChatMessage = {
+                                role,
+                                content: String(stored.content ?? ''),
+                        };
+                        await getConversationStore().addMessage(conversationId, chatMsg);
+                        return { success: true };
+                } catch (e) {
+                        return { error: (e as Error).message };
+                }
         });
 
         // ---- Codebase indexer ----
