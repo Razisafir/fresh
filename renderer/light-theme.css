@@ -1,0 +1,303 @@
+/* ==========================================================================
+   light-theme.css — Light theme for Kovix (07C_LIGHT_THEME_TRADEOFF.md).
+   
+   Activated via `<html data-theme="light">`. Falls back to dark theme
+   when data-theme is absent or set to "dark".
+   
+   Follows the same design token structure as chat.css, but with
+   light-appropriate values inspired by GitHub Light / VS Code Light+.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Light theme tokens — override the :root dark tokens
+   -------------------------------------------------------------------------- */
+[data-theme="light"] {
+  /* Surface / background — light */
+  --bg-base:       #ffffff;
+  --bg-surface:    #f6f8fa;
+  --bg-elevated:   #ffffff;
+  --bg-hover:      #f3f4f6;
+  --bg-active:     #eaeef2;
+
+  /* Text — dark for light backgrounds */
+  --text-primary:  #1f2328;
+  --text-secondary:#656d76;
+  --text-muted:    #8b949e;
+  --text-inverse:  #ffffff;
+
+  /* Accent — same purple but slightly adjusted for light bg */
+  --accent:        #5a60e6;
+  --accent-hover:  #4a50d0;
+  --accent-muted:  rgba(90, 96, 230, 0.10);
+
+  /* Semantic — adjusted for light */
+  --success:       #1a7f37;
+  --warning:       #9a6700;
+  --error:         #cf222e;
+  --info:          #0969da;
+
+  /* Borders — more visible on light */
+  --border:        #d0d7de;
+  --border-focus:  var(--accent);
+}
+
+/* --------------------------------------------------------------------------
+   Title bar — light
+   -------------------------------------------------------------------------- */
+[data-theme="light"] #titlebar {
+  background: #f6f8fa;
+  border-bottom-color: #d0d7de;
+}
+
+[data-theme="light"] #titlebar-icon .logo {
+  color: #5a60e6;
+}
+
+[data-theme="light"] .titlebar-menu-item {
+  color: #1f2328;
+}
+
+[data-theme="light"] .titlebar-menu-item:hover {
+  background: #eaeef2;
+}
+
+[data-theme="light"] .titlebar-title {
+  color: #656d76;
+}
+
+[data-theme="light"] .window-controls button {
+  color: #1f2328;
+}
+
+[data-theme="light"] .window-controls button:hover {
+  background: #eaeef2;
+}
+
+/* --------------------------------------------------------------------------
+   Tab bar — light
+   -------------------------------------------------------------------------- */
+[data-theme="light"] #tabbar {
+  background: #f6f8fa;
+  border-bottom-color: #d0d7de;
+}
+
+[data-theme="light"] .tab {
+  color: #656d76;
+  border-right-color: #d0d7de;
+}
+
+[data-theme="light"] .tab:hover {
+  background: #eaeef2;
+}
+
+[data-theme="light"] .tab.active {
+  background: #ffffff;
+  color: #1f2328;
+  border-bottom-color: #5a60e6;
+}
+
+[data-theme="light"] .tab-close:hover {
+  background: rgba(207, 34, 46, 0.1);
+  color: #cf222e;
+}
+
+/* --------------------------------------------------------------------------
+   Toolbar — light
+   -------------------------------------------------------------------------- */
+[data-theme="light"] #toolbar {
+  background: #f6f8fa;
+  border-bottom-color: #d0d7de;
+}
+
+[data-theme="light"] .toolbar-btn {
+  color: #656d76;
+}
+
+[data-theme="light"] .toolbar-btn:hover {
+  background: #eaeef2;
+  color: #1f2328;
+}
+
+[data-theme="light"] .toolbar-btn.active {
+  background: rgba(90, 96, 230, 0.10);
+  color: #5a60e6;
+}
+
+/* --------------------------------------------------------------------------
+   Main content panels — light
+   -------------------------------------------------------------------------- */
+[data-theme="light"] #main-content {
+  background: #ffffff;
+}
+
+/* File tree — light */
+[data-theme="light"] .filetree-panel {
+  background: #f6f8fa;
+  border-right-color: #d0d7de;
+}
+
+[data-theme="light"] .filetree-header {
+  background: #f6f8fa;
+  border-bottom-color: #d0d7de;
+  color: #1f2328;
+}
+
+[data-theme="light"] .filetree-item {
+  color: #1f2328;
+}
+
+[data-theme="light"] .filetree-item:hover {
+  background: #eaeef2;
+}
+
+[data-theme="light"] .filetree-item.active {
+  background: rgba(90, 96, 230, 0.10);
+  color: #5a60e6;
+}
+
+[data-theme="light"] .filetree-item .pending-dot {
+  box-shadow: 0 0 0 2px #f6f8fa;
+}
+
+/* Editor — light */
+[data-theme="light"] .editor-panel {
+  background: #ffffff;
+}
+
+[data-theme="light"] .editor-header {
+  background: #ffffff;
+  border-bottom-color: #d0d7de;
+}
+
+[data-theme="light"] .editor-file-path {
+  color: #656d76;
+}
+
+[data-theme="light"] .editor-diff-badge {
+  background: rgba(90, 96, 230, 0.10);
+  color: #5a60e6;
+}
+
+[data-theme="light"] .btn-editor-accept {
+  background: #1a7f37;
+  color: #fff;
+}
+
+[data-theme="light"] .btn-editor-accept:hover {
+  background: #238636;
+}
+
+[data-theme="light"] .btn-editor-reject {
+  background: #cf222e;
+  color: #fff;
+}
+
+[data-theme="light"] .btn-editor-reject:hover {
+  background: #da3633;
+}
+
+[data-theme="light"] .editor-empty {
+  color: #8b949e;
+}
+
+[data-theme="light"] .editor-empty-hint {
+  color: #8b949e;
+}
+
+[data-theme="light"] .editor-container .monaco-editor,
+[data-theme="light"] .editor-container .monaco-editor .margin,
+[data-theme="light"] .editor-container .monaco-editor-background {
+  background-color: #ffffff !important;
+}
+
+/* Chat — light */
+[data-theme="light"] .chat-panel {
+  background: #f6f8fa;
+  border-left-color: #d0d7de;
+}
+
+[data-theme="light"] .chat-header {
+  background: #f6f8fa;
+  border-bottom-color: #d0d7de;
+  color: #1f2328;
+}
+
+[data-theme="light"] .chat-messages {
+  background: #ffffff;
+}
+
+[data-theme="light"] .chat-message.user {
+  background: #eaeef2;
+}
+
+[data-theme="light"] .chat-message.assistant {
+  background: #ffffff;
+}
+
+[data-theme="light"] .chat-message pre {
+  background: #f6f8fa;
+  border-color: #d0d7de;
+}
+
+[data-theme="light"] .chat-input-area {
+  background: #ffffff;
+  border-color: #d0d7de;
+}
+
+[data-theme="light"] .chat-input-area textarea {
+  background: #f6f8fa;
+  color: #1f2328;
+  border-color: #d0d7de;
+}
+
+[data-theme="light"] .chat-input-area textarea:focus {
+  border-color: #5a60e6;
+  box-shadow: 0 0 0 3px rgba(90, 96, 230, 0.15);
+}
+
+[data-theme="light"] .chat-send-btn {
+  background: #5a60e6;
+  color: #ffffff;
+}
+
+[data-theme="light"] .chat-send-btn:hover {
+  background: #4a50d0;
+}
+
+[data-theme="light"] .chat-send-btn:disabled {
+  background: #d0d7de;
+  cursor: not-allowed;
+}
+
+/* Tool call cards — light */
+[data-theme="light"] .tool-call-card {
+  background: #f6f8fa;
+  border-color: #d0d7de;
+}
+
+[data-theme="light"] .tool-call-header {
+  background: #eaeef2;
+  color: #1f2328;
+}
+
+/* Resize handles — light */
+[data-theme="light"] .resize-handle {
+  background: #d0d7de;
+}
+
+[data-theme="light"] .resize-handle:hover {
+  background: #5a60e6;
+}
+
+/* Scrollbars — light */
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #f6f8fa;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #d0d7de;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #8b949e;
+}

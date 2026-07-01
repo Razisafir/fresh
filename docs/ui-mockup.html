@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kovix — Future Professional UI Mockup</title>
+  <style>
+    /* ==========================================================================
+       Kovix Future UI — Premium Professional Design Mockup
+       ========================================================================== */
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    :root {
+      --bg-base:       #0d1117;
+      --bg-surface:    #010409;
+      --bg-elevated:   #161b22;
+      --bg-hover:      #1c2128;
+      --bg-active:     #272c33;
+      --text-primary:  #e6edf3;
+      --text-secondary:#8b949e;
+      --text-muted:    #484f58;
+      --accent:        #7c83ff;
+      --accent-hover:  #6369e0;
+      --accent-muted:  rgba(124, 131, 255, 0.12);
+      --success:       #3fb950;
+      --warning:       #d29922;
+      --error:         #f85149;
+      --info:          #58a6ff;
+      --border:        #21262d;
+      --font-sans:     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono:     'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---- Mockup Banner ---- */
+    .mockup-banner {
+      background: linear-gradient(135deg, rgba(124, 131, 255, 0.15), rgba(88, 166, 255, 0.08));
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .mockup-banner h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .mockup-banner p {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .mockup-tabs {
+      display: flex;
+      gap: 4px;
+    }
+    .mockup-tab {
+      padding: 4px 12px;
+      font-size: 11px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+    }
+    .mockup-tab.active {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+    .mockup-tab:hover:not(.active) {
+      background: var(--bg-hover);
+    }
+
+    /* ---- Title Bar ---- */
+    .titlebar {
+      display: flex;
+      align-items: center;
+      height: 36px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      padding: 0 8px;
+      -webkit-app-region: drag;
+    }
+    .titlebar-logo {
+      font-weight: 800;
+      font-size: 15px;
+      color: var(--accent);
+      margin-right: 12px;
+      letter-spacing: -0.5px;
+    }
+    .titlebar-menu {
+      display: flex;
+      gap: 2px;
+      -webkit-app-region: no-drag;
+    }
+    .titlebar-menu button {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .titlebar-menu button:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .titlebar-title {
+      flex: 1;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .titlebar-controls {
+      display: flex;
+      gap: 0;
+      -webkit-app-region: no-drag;
+    }
+    .titlebar-controls button {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      width: 36px;
+      height: 36px;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .titlebar-controls button:hover {
+      background: var(--bg-hover);
+    }
+    .titlebar-controls button:last-child:hover {
+      background: var(--error);
+      color: white;
+    }
+
+    /* ---- Activity Bar (NEW — left icon strip) ---- */
+    .app-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .activity-bar {
+      width: 48px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 0;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .activity-icon {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-size: 18px;
+      color: var(--text-muted);
+      cursor: pointer;
+      position: relative;
+      transition: all 150ms ease;
+    }
+    .activity-icon:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .activity-icon.active {
+      color: var(--accent);
+      background: var(--accent-muted);
+    }
+    .activity-icon.active::before {
+      content: '';
+      position: absolute;
+      left: -4px;
+      top: 8px;
+      bottom: 8px;
+      width: 3px;
+      background: var(--accent);
+      border-radius: 0 2px 2px 0;
+    }
+    .activity-spacer { flex: 1; }
+    .activity-badge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      color: white;
+      font-size: 9px;
+      font-weight: 700;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ---- File Tree Panel ---- */
+    .filetree-panel {
+      width: 240px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-header-actions {
+      display: flex;
+      gap: 4px;
+    }
+    .panel-header-actions button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px;
+      border-radius: 4px;
+    }
+    .panel-header-actions button:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .filetree-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+    .tree-item {
+      display: flex;
+      align-items: center;
+      padding: 3px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      gap: 6px;
+    }
+    .tree-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .tree-item.active { background: var(--accent-muted); color: var(--accent); }
+    .tree-item .icon { font-size: 14px; width: 18px; text-align: center; }
+    .tree-item.folder .icon { color: var(--accent); }
+    .tree-item .pending-indicator {
+      width: 6px; height: 6px; border-radius: 50%;
+      margin-left: auto; flex-shrink: 0;
+    }
+    .pending-indicator.modified { background: var(--warning); }
+    .pending-indicator.added { background: var(--success); }
+    .pending-indicator.deleted { background: var(--error); }
+
+    /* ---- Main Editor Area ---- */
+    .editor-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .tab-bar {
+      display: flex;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .tab {
+      display: flex;
+      align-items: center;
+      padding: 6px 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border-right: 1px solid var(--border);
+      cursor: pointer;
+      gap: 6px;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .tab:hover { background: var(--bg-hover); }
+    .tab.active {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      border-bottom: 2px solid var(--accent);
+    }
+    .tab .close {
+      font-size: 14px;
+      opacity: 0;
+      cursor: pointer;
+      margin-left: 4px;
+    }
+    .tab:hover .close { opacity: 0.6; }
+    .tab .close:hover { opacity: 1; color: var(--error); }
+    .tab .modified-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--warning);
+    }
+
+    /* Editor content mockup */
+    .editor-content {
+      flex: 1;
+      padding: 16px 24px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+      overflow-y: auto;
+      background: var(--bg-base);
+    }
+    .line { display: flex; }
+    .line-number {
+      width: 48px;
+      text-align: right;
+      color: var(--text-muted);
+      user-select: none;
+      padding-right: 16px;
+      flex-shrink: 0;
+    }
+    .line-content { flex: 1; }
+    .keyword { color: #ff7b72; }
+    .string { color: #a5d6ff; }
+    .comment { color: var(--text-muted); font-style: italic; }
+    .function { color: #d2a8ff; }
+    .type { color: #79c0ff; }
+    .variable { color: #ffa657; }
+    .number { color: #79c0ff; }
+
+    /* Breadcrumb */
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border);
+    }
+    .breadcrumb span { cursor: pointer; }
+    .breadcrumb span:hover { color: var(--text-primary); }
+    .breadcrumb .sep { color: var(--text-muted); }
+
+    /* ---- Right Panel: AI Assistant ---- */
+    .chat-panel {
+      width: 380px;
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .chat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .chat-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .chat-header h3 {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .provider-badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: var(--accent-muted);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .model-selector {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      cursor: pointer;
+    }
+
+    /* Mode tabs */
+    .chat-modes {
+      display: flex;
+      gap: 2px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .mode-btn {
+      flex: 1;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      transition: all 150ms ease;
+    }
+    .mode-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+    .mode-btn.active {
+      background: var(--accent);
+      color: white;
+    }
+
+    /* Messages */
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .message {
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 100%;
+    }
+    .message.user {
+      background: var(--bg-elevated);
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .message.assistant {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .message pre {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin: 8px 0;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      overflow-x: auto;
+    }
+    
+    /* Tool call card */
+    .tool-call {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin: 6px 0;
+      overflow: hidden;
+    }
+    .tool-call-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg-hover);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .tool-call-header .status {
+      width: 6px; height: 6px; border-radius: 50%;
+    }
+    .tool-call-header .status.running { background: var(--accent); animation: pulse 1s infinite; }
+    .tool-call-header .status.done { background: var(--success); }
+    .tool-call-header .status.error { background: var(--error); }
+    .tool-call-body {
+      padding: 8px 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      max-height: 80px;
+      overflow-y: auto;
+    }
+    
+    /* Pending changes summary */
+    .pending-summary {
+      background: rgba(210, 153, 34, 0.08);
+      border: 1px solid rgba(210, 153, 34, 0.3);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 6px 0;
+    }
+    .pending-summary h4 {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--warning);
+      margin-bottom: 6px;
+    }
+    .pending-file {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      padding: 2px 0;
+    }
+    .pending-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .pending-actions button {
+      padding: 4px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-accept { background: var(--success); color: white; }
+    .btn-reject { background: var(--error); color: white; }
+
+    /* Chat input */
+    .chat-input {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .chat-input-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .chat-input textarea {
+      flex: 1;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      resize: none;
+      outline: none;
+      min-height: 40px;
+      max-height: 120px;
+    }
+    .chat-input textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-muted);
+    }
+    .chat-input textarea::placeholder {
+      color: var(--text-muted);
+    }
+    .send-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 150ms ease;
+    }
+    .send-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+    .send-btn:disabled { background: var(--bg-active); cursor: not-allowed; transform: none; }
+    
+    .chat-input-hint {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      padding: 0 4px;
+    }
+    .kbd {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 4px;
+      font-size: 10px;
+      font-family: var(--font-mono);
+    }
+
+    /* ---- Status Bar ---- */
+    .statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 24px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      padding: 0 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .statusbar-left, .statusbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .statusbar-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .statusbar-item:hover { color: var(--text-secondary); }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+    }
+    .status-dot.connected { background: var(--success); }
+    .status-dot.disconnected { background: var(--error); }
+    .status-dot.degraded { background: var(--warning); }
+
+    /* ---- Animations ---- */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .message { animation: slideIn 200ms ease; }
+
+    /* ---- Resize handles ---- */
+    .resize-handle {
+      width: 3px;
+      cursor: col-resize;
+      transition: background 150ms ease;
+    }
+    .resize-handle:hover { background: var(--accent); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-active); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    /* ---- Annotations ---- */
+    .annotation {
+      position: absolute;
+      background: rgba(124, 131, 255, 0.9);
+      color: white;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      pointer-events: none;
+      z-index: 100;
+      white-space: nowrap;
+    }
+    .annotation::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 4px solid rgba(124, 131, 255, 0.9);
+    }
+  </style>
+</head>
+<body>
+  <!-- Mockup Banner -->
+  <div class="mockup-banner">
+    <div>
+      <h1>Kovix — Future Professional UI Mockup</h1>
+      <p>Visual plan for the next-generation Kovix interface. This is a design reference, not the current UI.</p>
+    </div>
+    <div class="mockup-tabs">
+      <div class="mockup-tab active" onclick="showView('main')">Main View</div>
+      <div class="mockup-tab" onclick="showView('diff')">Diff View</div>
+      <div class="mockup-tab" onclick="showView('swarm')">Swarm View</div>
+    </div>
+  </div>
+
+  <!-- Title Bar -->
+  <div class="titlebar">
+    <span class="titlebar-logo">K</span>
+    <div class="titlebar-menu">
+      <button>File</button>
+      <button>Edit</button>
+      <button>View</button>
+      <button>Agent</button>
+      <button>Help</button>
+    </div>
+    <div class="titlebar-title">Kovix — my-project</div>
+    <div class="titlebar-controls">
+      <button>&#8722;</button>
+      <button>&#9633;</button>
+      <button>&#10005;</button>
+    </div>
+  </div>
+
+  <!-- Main Layout -->
+  <div class="app-layout">
+    <!-- Activity Bar -->
+    <div class="activity-bar">
+      <div class="activity-icon active" title="Explorer">&#128193;</div>
+      <div class="activity-icon" title="Search">&#128269;</div>
+      <div class="activity-icon" title="Source Control">&#128276;
+        <div class="activity-badge">3</div>
+      </div>
+      <div class="activity-icon" title="Debug">&#9881;</div>
+      <div class="activity-icon" title="Extensions">&#9638;</div>
+      <div class="activity-spacer"></div>
+      <div class="activity-icon" title="AI Agent" style="color: var(--accent);">&#9733;</div>
+      <div class="activity-icon" title="Settings">&#9881;</div>
+    </div>
+
+    <!-- File Tree -->
+    <div class="filetree-panel">
+      <div class="panel-header">
+        <span>Explorer</span>
+        <div class="panel-header-actions">
+          <button title="New File">+</button>
+          <button title="Refresh">&#8635;</button>
+        </div>
+      </div>
+      <div class="filetree-list">
+        <div class="tree-item folder"><span class="icon">&#128193;</span> src</div>
+        <div class="tree-item" style="padding-left: 28px;"><span class="icon" style="color: #f1e05a;">JS</span> agentLoop.ts</div>
+        <div class="tree-item" style="padding-left: 28px;"><span class="icon" style="color: #f1e05a;">JS</span> aiService.ts <div class="pending-indicator modified"></div></div>
+        <div class="tree-item" style="padding-left: 28px;"><span class="icon" style="color: #f1e05a;">JS</span> mcpManager.ts <div class="pending-indicator modified"></div></div>
+        <div class="tree-item folder" style="padding-left: 28px;"><span class="icon">&#128193;</span> llm</div>
+        <div class="tree-item" style="padding-left: 44px;"><span class="icon" style="color: #f1e05a;">JS</span> groqProvider.ts <div class="pending-indicator added"></div></div>
+        <div class="tree-item" style="padding-left: 44px;"><span class="icon" style="color: #f1e05a;">JS</span> geminiProvider.ts <div class="pending-indicator added"></div></div>
+        <div class="tree-item folder" style="padding-left: 28px;"><span class="icon">&#128193;</span> security</div>
+        <div class="tree-item" style="padding-left: 44px;"><span class="icon" style="color: #f1e05a;">JS</span> workspaceGuard.ts</div>
+        <div class="tree-item folder"><span class="icon">&#128193;</span> electron</div>
+        <div class="tree-item" style="padding-left: 28px;"><span class="icon" style="color: #f1e05a;">JS</span> main.ts</div>
+        <div class="tree-item" style="padding-left: 28px;"><span class="icon" style="color: #f1e05a;">JS</span> preload.ts</div>
+        <div class="tree-item folder"><span class="icon">&#128193;</span> renderer</div>
+        <div class="tree-item" style="padding-left: 28px;"><span class="icon" style="color: #e34c26;">HT</span> index.html</div>
+        <div class="tree-item" style="padding-left: 28px;"><span class="icon" style="color: #563d7c;">CS</span> light-theme.css <div class="pending-indicator added"></div></div>
+        <div class="tree-item"><span class="icon" style="color: #e34c26;">&#9776;</span> package.json</div>
+        <div class="tree-item"><span class="icon" style="color: #8b949e;">&#9776;</span> tsconfig.json</div>
+      </div>
+    </div>
+
+    <div class="resize-handle"></div>
+
+    <!-- Editor Area -->
+    <div class="editor-area" id="view-main">
+      <!-- Breadcrumb -->
+      <div class="breadcrumb">
+        <span>src</span><span class="sep">/</span>
+        <span>llm</span><span class="sep">/</span>
+        <span>aiService.ts</span>
+      </div>
+      <!-- Tab Bar -->
+      <div class="tab-bar">
+        <div class="tab active">
+          <span>aiService.ts</span>
+          <div class="modified-dot"></div>
+          <span class="close">&times;</span>
+        </div>
+        <div class="tab">
+          <span>mcpManager.ts</span>
+          <div class="modified-dot"></div>
+          <span class="close">&times;</span>
+        </div>
+        <div class="tab">
+          <span>main.ts</span>
+          <span class="close">&times;</span>
+        </div>
+      </div>
+      <!-- Editor Content -->
+      <div class="editor-content">
+        <div class="line"><span class="line-number">1</span><span class="line-content"><span class="comment">/**</span></span></div>
+        <div class="line"><span class="line-number">2</span><span class="line-content"><span class="comment"> * aiService.ts — Multi-provider LLM service</span></span></div>
+        <div class="line"><span class="line-number">3</span><span class="line-content"><span class="comment"> */</span></span></div>
+        <div class="line"><span class="line-number">4</span><span class="line-content"></span></div>
+        <div class="line"><span class="line-number">5</span><span class="line-content"><span class="keyword">import</span> { <span class="type">AnthropicProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/anthropicProvider'</span>;</span></div>
+        <div class="line"><span class="line-number">6</span><span class="line-content"><span class="keyword">import</span> { <span class="type">GroqProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/groqProvider'</span>; <span class="comment">// NEW</span></span></div>
+        <div class="line"><span class="line-number">7</span><span class="line-content"><span class="keyword">import</span> { <span class="type">MistralProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/mistralProvider'</span>; <span class="comment">// NEW</span></span></div>
+        <div class="line"><span class="line-number">8</span><span class="line-content"><span class="keyword">import</span> { <span class="type">GeminiProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/geminiProvider'</span>; <span class="comment">// NEW</span></span></div>
+        <div class="line"><span class="line-number">9</span><span class="line-content"><span class="keyword">import</span> { <span class="type">TogetherProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/togetherProvider'</span>; <span class="comment">// NEW</span></span></div>
+        <div class="line"><span class="line-number">10</span><span class="line-content"><span class="keyword">import</span> { <span class="type">LmStudioProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/lmStudioProvider'</span>; <span class="comment">// NEW</span></span></div>
+        <div class="line"><span class="line-number">11</span><span class="line-content"></span></div>
+        <div class="line"><span class="line-number">12</span><span class="line-content"><span class="keyword">export class</span> <span class="type">ConstructAIService</span> <span class="keyword">implements</span> <span class="type">IConstructAIService</span> {</span></div>
+        <div class="line"><span class="line-number">13</span><span class="line-content">  <span class="keyword">private readonly</span> <span class="variable">_providers</span> = <span class="keyword">new</span> <span class="type">Map</span>&lt;<span class="type">AIProviderType</span>, <span class="type">IConstructAIProvider</span>&gt;();</span></div>
+        <div class="line"><span class="line-number">14</span><span class="line-content"></span></div>
+        <div class="line"><span class="line-number">15</span><span class="line-content">  <span class="function">constructor</span>() {</span></div>
+        <div class="line"><span class="line-number">16</span><span class="line-content">    <span class="comment">// 11 providers registered (6 original + 5 new)</span></span></div>
+        <div class="line"><span class="line-number">17</span><span class="line-content">    <span class="keyword">this</span>.<span class="variable">_providers</span>.<span class="function">set</span>(<span class="string">'groq'</span>, <span class="keyword">new</span> <span class="type">GroqProvider</span>(<span class="variable">secrets</span>));</span></div>
+        <div class="line"><span class="line-number">18</span><span class="line-content">    <span class="keyword">this</span>.<span class="variable">_providers</span>.<span class="function">set</span>(<span class="string">'mistral'</span>, <span class="keyword">new</span> <span class="type">MistralProvider</span>(<span class="variable">secrets</span>));</span></div>
+        <div class="line"><span class="line-number">19</span><span class="line-content">    <span class="keyword">this</span>.<span class="variable">_providers</span>.<span class="function">set</span>(<span class="string">'gemini'</span>, <span class="keyword">new</span> <span class="type">GeminiProvider</span>(<span class="variable">secrets</span>));</span></div>
+        <div class="line"><span class="line-number">20</span><span class="line-content">    <span class="keyword">this</span>.<span class="variable">_providers</span>.<span class="function">set</span>(<span class="string">'together'</span>, <span class="keyword">new</span> <span class="type">TogetherProvider</span>(<span class="variable">secrets</span>));</span></div>
+        <div class="line"><span class="line-number">21</span><span class="line-content">    <span class="keyword">this</span>.<span class="variable">_providers</span>.<span class="function">set</span>(<span class="string">'lm-studio'</span>, <span class="keyword">new</span> <span class="type">LmStudioProvider</span>(<span class="variable">secrets</span>));</span></div>
+        <div class="line"><span class="line-number">22</span><span class="line-content">  }</span></div>
+        <div class="line"><span class="line-number">23</span><span class="line-content">}</span></div>
+      </div>
+    </div>
+
+    <!-- Diff View (hidden by default) -->
+    <div class="editor-area" id="view-diff" style="display: none;">
+      <div class="breadcrumb">
+        <span>src</span><span class="sep">/</span>
+        <span>llm</span><span class="sep">/</span>
+        <span>aiService.ts</span>
+        <span style="color: var(--warning); margin-left: 12px;">&#9650; Pending Changes</span>
+      </div>
+      <div style="flex:1; display:flex; overflow:hidden;">
+        <div style="flex:1; background: var(--bg-base); padding:16px 24px; font-family:var(--font-mono); font-size:13px; border-right:2px solid var(--border); overflow-y:auto;">
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">ORIGINAL</div>
+          <div><span style="color:var(--text-muted);">6</span>  <span class="keyword">import</span> { <span class="type">OpenRouterProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/openrouterProvider'</span>;</div>
+          <div><span style="color:var(--error);background:rgba(248,81,73,0.1);display:inline-block;width:100%;">- <span class="comment">// Only 6 providers registered</span></span></div>
+        </div>
+        <div style="flex:1; background: var(--bg-base); padding:16px 24px; font-family:var(--font-mono); font-size:13px; overflow-y:auto;">
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">MODIFIED</div>
+          <div><span style="color:var(--text-muted);">6</span>  <span class="keyword">import</span> { <span class="type">OpenRouterProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/openrouterProvider'</span>;</div>
+          <div style="color:var(--success);background:rgba(63,185,80,0.1);display:inline-block;width:100%;">+ <span class="keyword">import</span> { <span class="type">GroqProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/groqProvider'</span>;</div>
+          <div style="color:var(--success);background:rgba(63,185,80,0.1);display:inline-block;width:100%;">+ <span class="keyword">import</span> { <span class="type">MistralProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/mistralProvider'</span>;</div>
+          <div style="color:var(--success);background:rgba(63,185,80,0.1);display:inline-block;width:100%;">+ <span class="keyword">import</span> { <span class="type">GeminiProvider</span> } <span class="keyword">from</span> <span class="string">'./providers/geminiProvider'</span>;</div>
+          <div style="color:var(--success);background:rgba(63,185,80,0.1);display:inline-block;width:100%;">+ <span class="comment">// 11 providers registered (6 original + 5 new)</span></div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; padding:8px 16px; border-top:1px solid var(--border); background:var(--bg-surface);">
+        <button class="btn-accept" style="padding:6px 16px; border:none; border-radius:6px; font-size:12px; cursor:pointer;">&#10003; Accept Change</button>
+        <button class="btn-reject" style="padding:6px 16px; border:none; border-radius:6px; font-size:12px; cursor:pointer;">&#10005; Reject Change</button>
+      </div>
+    </div>
+
+    <!-- Swarm View (hidden by default) -->
+    <div class="editor-area" id="view-swarm" style="display: none;">
+      <div class="breadcrumb">
+        <span style="color: var(--accent);">&#9733;</span>
+        <span>Agent Swarm Orchestrator</span>
+      </div>
+      <div style="flex:1; padding:24px; overflow-y:auto;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:600px;">
+          <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; padding:16px;">
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">WORKER 1 — CODER</div>
+            <div style="font-size:13px; color:var(--text-primary); margin-bottom:4px;">src/llm/providers/groqProvider.ts</div>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--success);"></div>
+              <span style="font-size:11px; color:var(--success);">Completed</span>
+            </div>
+          </div>
+          <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; padding:16px;">
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">WORKER 2 — CODER</div>
+            <div style="font-size:13px; color:var(--text-primary); margin-bottom:4px;">src/llm/providers/mistralProvider.ts</div>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite;"></div>
+              <span style="font-size:11px; color:var(--accent);">In Progress</span>
+            </div>
+          </div>
+          <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; padding:16px;">
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">WORKER 3 — REVIEWER</div>
+            <div style="font-size:13px; color:var(--text-primary); margin-bottom:4px;">Security audit of new providers</div>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--text-muted);"></div>
+              <span style="font-size:11px; color:var(--text-muted);">Queued</span>
+            </div>
+          </div>
+          <div style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; padding:16px;">
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">CREDIT SYSTEM</div>
+            <div style="font-size:24px; font-weight:700; color:var(--accent); margin:4px 0;">847</div>
+            <div style="font-size:11px; color:var(--text-muted);">credits remaining</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="resize-handle"></div>
+
+    <!-- Chat Panel -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <h3>AI Agent</h3>
+          <span class="provider-badge">Anthropic</span>
+        </div>
+        <select class="model-selector">
+          <option>claude-sonnet-4</option>
+          <option>gpt-4o</option>
+          <option>llama-3.3-70b</option>
+          <option>gemini-2.0-flash</option>
+          <option>deepseek-chat</option>
+        </select>
+      </div>
+
+      <!-- Execution Mode Tabs -->
+      <div class="chat-modes">
+        <button class="mode-btn active">Plan</button>
+        <button class="mode-btn">Execute</button>
+        <button class="mode-btn">Auto</button>
+        <button class="mode-btn">Swarm</button>
+      </div>
+
+      <!-- Messages -->
+      <div class="chat-messages">
+        <div class="message user">
+          Add missing LLM providers: Groq, Mistral, Gemini, Together, and LM Studio
+        </div>
+        <div class="message assistant">
+          I'll add all 5 missing providers following the existing OpenAI-compatible pattern. Let me start:
+          <div class="tool-call">
+            <div class="tool-call-header">
+              <div class="status done"></div>
+              <span>write_file</span>
+              <span style="color:var(--text-muted);">src/llm/providers/groqProvider.ts</span>
+            </div>
+            <div class="tool-call-body">Created 300-line Groq provider with SSE streaming, tool calling, and retry logic...</div>
+          </div>
+          <div class="tool-call">
+            <div class="tool-call-header">
+              <div class="status running"></div>
+              <span>write_file</span>
+              <span style="color:var(--text-muted);">src/llm/providers/mistralProvider.ts</span>
+            </div>
+            <div class="tool-call-body">Writing Mistral provider...</div>
+          </div>
+          <div class="pending-summary">
+            <h4>&#9650; 3 Pending Changes</h4>
+            <div class="pending-file"><div style="width:6px;height:6px;border-radius:50%;background:var(--success);flex-shrink:0;"></div> groqProvider.ts (new)</div>
+            <div class="pending-file"><div style="width:6px;height:6px;border-radius:50%;background:var(--warning);flex-shrink:0;"></div> aiService.ts (modified)</div>
+            <div class="pending-file"><div style="width:6px;height:6px;border-radius:50%;background:var(--success);flex-shrink:0;"></div> mistralProvider.ts (new)</div>
+            <div class="pending-actions">
+              <button class="btn-accept">Accept All</button>
+              <button class="btn-reject">Reject All</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="chat-input">
+        <div class="chat-input-row">
+          <textarea placeholder="Ask the AI agent... (type / for commands)" rows="1"></textarea>
+          <button class="send-btn">&#9654;</button>
+        </div>
+        <div class="chat-input-hint">
+          <span><span class="kbd">Enter</span> to send &middot; <span class="kbd">Shift+Enter</span> for new line</span>
+          <span><span class="kbd">/</span> for commands</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="statusbar">
+    <div class="statusbar-left">
+      <div class="statusbar-item">
+        <div class="status-dot connected"></div>
+        <span>Anthropic</span>
+      </div>
+      <div class="statusbar-item">claude-sonnet-4</div>
+      <div class="statusbar-item">&#9650; 3 pending</div>
+      <div class="statusbar-item">Plan Mode</div>
+    </div>
+    <div class="statusbar-right">
+      <div class="statusbar-item">
+        <div class="status-dot degraded"></div>
+        <span>Embeddings: degraded</span>
+      </div>
+      <div class="statusbar-item">847 credits</div>
+      <div class="statusbar-item">TypeScript</div>
+      <div class="statusbar-item">UTF-8</div>
+    </div>
+  </div>
+
+  <script>
+    function showView(view) {
+      document.getElementById('view-main').style.display = view === 'main' ? 'flex' : 'none';
+      document.getElementById('view-diff').style.display = view === 'diff' ? 'flex' : 'none';
+      document.getElementById('view-swarm').style.display = view === 'swarm' ? 'flex' : 'none';
+      document.querySelectorAll('.mockup-tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+  </script>
+</body>
+</html>

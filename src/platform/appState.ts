@@ -23,17 +23,18 @@ import { logger } from '../util/logger';
 // ---------------------------------------------------------------------------
 
 const DEFAULT_CONFIG: IAppConfig = {
-	llmActiveProvider: 'anthropic',
-	llmActiveModel: '',
-	autonomyDefaultMode: 'major_milestone',
-	autonomyPauseOnVerificationFailure: true,
-	memoryEmbedProvider: 'ollama',
-	memoryEmbedModel: 'nomic-embed-text',
-	memoryVectorStore: 'in-process',
-	mcpServers: [],
-	mcpToolTimeoutMs: 30_000,
-	securityAllowExternalTargets: false,
-	debugVerbose: false,
+        llmActiveProvider: 'anthropic',
+        llmActiveModel: '',
+        autonomyDefaultMode: 'major_milestone',
+        autonomyPauseOnVerificationFailure: true,
+        memoryEmbedProvider: 'ollama',
+        memoryEmbedModel: 'nomic-embed-text',
+        memoryVectorStore: 'in-process',
+        mcpServers: [],
+        mcpToolTimeoutMs: 30_000,
+        securityAllowExternalTargets: false,
+        debugVerbose: false,
+        agentRole: 'general',
 };
 
 // ---------------------------------------------------------------------------
@@ -46,85 +47,85 @@ const DEFAULT_CONFIG: IAppConfig = {
  * values are stored as base64 strings.
  */
 class FileSecrets implements ISecrets {
-	private readonly filePath: string;
-	private readonly _data = new Map<string, string>();
-	private _encrypt: ((plaintext: string) => string) | undefined;
-	private _decrypt: ((cipher: string) => string) | undefined;
-	private _loaded = false;
+        private readonly filePath: string;
+        private readonly _data = new Map<string, string>();
+        private _encrypt: ((plaintext: string) => string) | undefined;
+        private _decrypt: ((cipher: string) => string) | undefined;
+        private _loaded = false;
 
-	constructor(baseDir: string) {
-		this.filePath = path.join(baseDir, 'secrets.json');
-	}
+        constructor(baseDir: string) {
+                this.filePath = path.join(baseDir, 'secrets.json');
+        }
 
-	/** Set the encryption/decryption functions. Called by electron/main.ts
-	 *  after app is ready and safeStorage is available. */
-	setCrypto(encrypt: (plaintext: string) => string, decrypt: (cipher: string) => string): void {
-		this._encrypt = encrypt;
-		this._decrypt = decrypt;
-	}
+        /** Set the encryption/decryption functions. Called by electron/main.ts
+         *  after app is ready and safeStorage is available. */
+        setCrypto(encrypt: (plaintext: string) => string, decrypt: (cipher: string) => string): void {
+                this._encrypt = encrypt;
+                this._decrypt = decrypt;
+        }
 
-	private async ensureLoaded(): Promise<void> {
-		if (this._loaded) return;
-		this._loaded = true;
-		try {
-			const raw = await fs.readFile(this.filePath, 'utf8');
-			const parsed = JSON.parse(raw) as Record<string, string>;
-			for (const [key, value] of Object.entries(parsed)) {
-				this._data.set(key, value);
-			}
-		} catch {
-			// File doesn't exist yet — start with empty map.
-		}
-	}
+        private async ensureLoaded(): Promise<void> {
+                if (this._loaded) return;
+                this._loaded = true;
+                try {
+                        const raw = await fs.readFile(this.filePath, 'utf8');
+                        const parsed = JSON.parse(raw) as Record<string, string>;
+                        for (const [key, value] of Object.entries(parsed)) {
+                                this._data.set(key, value);
+                        }
+                } catch {
+                        // File doesn't exist yet — start with empty map.
+                }
+        }
 
-	private async persist(): Promise<void> {
-		const obj: Record<string, string> = {};
-		for (const [key, value] of this._data) {
-			obj[key] = value;
-		}
-		await fs.writeFile(this.filePath, JSON.stringify(obj, null, 2), 'utf8');
-	}
+        private async persist(): Promise<void> {
+                const obj: Record<string, string> = {};
+                for (const [key, value] of this._data) {
+                        obj[key] = value;
+                }
+                await fs.writeFile(this.filePath, JSON.stringify(obj, null, 2), 'utf8');
+        }
 
-	async get(key: string): Promise<string | undefined> {
-		await this.ensureLoaded();
-		const cipher = this._data.get(key);
-		if (cipher === undefined) return undefined;
-		if (this._decrypt) {
-			try {
-				return this._decrypt(cipher);
-			} catch {
-				// Fallback: might be a base64 value from before safeStorage was set
-				try {
-					return Buffer.from(cipher, 'base64').toString('utf8');
-				} catch {
-					return undefined;
-				}
-			}
-		}
-		// Dev mode: base64 decode
-		try {
-			return Buffer.from(cipher, 'base64').toString('utf8');
-		} catch {
-			return cipher;
-		}
-	}
+        async get(key: string): Promise<string | undefined> {
+                await this.ensureLoaded();
+                const cipher = this._data.get(key);
+                if (cipher === undefined) return undefined;
+                if (this._decrypt) {
+                        try {
+                                return this._decrypt(cipher);
+                        } catch {
+                                // Fallback: might be a base64 value from before safeStorage was set
+                                try {
+                                        return Buffer.from(cipher, 'base64').toString('utf8');
+                                } catch {
+                                        return undefined;
+                                }
+                        }
+                }
+                // Dev mode: base64 decode
+                try {
+                        return Buffer.from(cipher, 'base64').toString('utf8');
+                } catch {
+                        return cipher;
+                }
+        }
 
-	async store(key: string, value: string): Promise<void> {
-		await this.ensureLoaded();
-		if (this._encrypt) {
-			this._data.set(key, this._encrypt(value));
-		} else {
-			// Dev mode: base64 encode
-			this._data.set(key, Buffer.from(value, 'utf8').toString('base64'));
-		}
-		await this.persist();
-	}
+        async store(key: string, value: string): Promise<void> {
+                await this.ensureLoaded();
+                if (this._encrypt) {
+                        this._data.set(key, this._encrypt(value));
+                } else {
+                        // Dev mode: base64 encode
+                        this._data.set(key, Buffer.from(value, 'utf8').toString('base64'));
+                }
+                await this.persist();
+        }
 
-	async delete(key: string): Promise<void> {
-		await this.ensureLoaded();
-		this._data.delete(key);
-		await this.persist();
-	}
+        async delete(key: string): Promise<void> {
+                await this.ensureLoaded();
+                this._data.delete(key);
+                await this.persist();
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -132,16 +133,16 @@ class FileSecrets implements ISecrets {
 // ---------------------------------------------------------------------------
 
 class MutableWorkspaceRoots implements IWorkspaceRoots {
-	private _roots: readonly string[] = [];
+        private _roots: readonly string[] = [];
 
-	get roots(): readonly string[] {
-		return this._roots;
-	}
+        get roots(): readonly string[] {
+                return this._roots;
+        }
 
-	setRoots(roots: readonly string[]): void {
-		this._roots = roots;
-		logger.info(`[AppState] Workspace roots set: ${roots.join(', ') || '(none)'}`);
-	}
+        setRoots(roots: readonly string[]): void {
+                this._roots = roots;
+                logger.info(`[AppState] Workspace roots set: ${roots.join(', ') || '(none)'}`);
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -149,52 +150,54 @@ class MutableWorkspaceRoots implements IWorkspaceRoots {
 // ---------------------------------------------------------------------------
 
 class FileConfig implements IAppConfig {
-	private _data: IAppConfig;
-	private readonly filePath: string;
+        private _data: IAppConfig;
+        private readonly filePath: string;
 
-	constructor(baseDir: string) {
-		this.filePath = path.join(baseDir, 'kovix.config.json');
-		this._data = { ...DEFAULT_CONFIG };
-	}
+        constructor(baseDir: string) {
+                this.filePath = path.join(baseDir, 'kovix.config.json');
+                this._data = { ...DEFAULT_CONFIG };
+        }
 
-	get llmActiveProvider(): string { return this._data.llmActiveProvider; }
-	set llmActiveProvider(v: string) { this._data.llmActiveProvider = v; }
-	get llmActiveModel(): string { return this._data.llmActiveModel; }
-	set llmActiveModel(v: string) { this._data.llmActiveModel = v; }
-	get autonomyDefaultMode(): string { return this._data.autonomyDefaultMode; }
-	set autonomyDefaultMode(v: string) { this._data.autonomyDefaultMode = v; }
-	get autonomyPauseOnVerificationFailure(): boolean { return this._data.autonomyPauseOnVerificationFailure; }
-	set autonomyPauseOnVerificationFailure(v: boolean) { this._data.autonomyPauseOnVerificationFailure = v; }
-	get memoryEmbedProvider(): string { return this._data.memoryEmbedProvider; }
-	set memoryEmbedProvider(v: string) { this._data.memoryEmbedProvider = v; }
-	get memoryEmbedModel(): string { return this._data.memoryEmbedModel; }
-	set memoryEmbedModel(v: string) { this._data.memoryEmbedModel = v; }
-	get memoryVectorStore(): string { return this._data.memoryVectorStore; }
-	set memoryVectorStore(v: string) { this._data.memoryVectorStore = v; }
-	get mcpServers(): IAppConfig['mcpServers'] { return this._data.mcpServers; }
-	set mcpServers(v: IAppConfig['mcpServers']) { this._data.mcpServers = v; }
-	get mcpToolTimeoutMs(): number { return this._data.mcpToolTimeoutMs; }
-	set mcpToolTimeoutMs(v: number) { this._data.mcpToolTimeoutMs = v; }
-	get securityAllowExternalTargets(): boolean { return this._data.securityAllowExternalTargets; }
-	set securityAllowExternalTargets(v: boolean) { this._data.securityAllowExternalTargets = v; }
-	get debugVerbose(): boolean { return this._data.debugVerbose; }
-	set debugVerbose(v: boolean) { this._data.debugVerbose = v; }
+        get llmActiveProvider(): string { return this._data.llmActiveProvider; }
+        set llmActiveProvider(v: string) { this._data.llmActiveProvider = v; }
+        get llmActiveModel(): string { return this._data.llmActiveModel; }
+        set llmActiveModel(v: string) { this._data.llmActiveModel = v; }
+        get autonomyDefaultMode(): string { return this._data.autonomyDefaultMode; }
+        set autonomyDefaultMode(v: string) { this._data.autonomyDefaultMode = v; }
+        get autonomyPauseOnVerificationFailure(): boolean { return this._data.autonomyPauseOnVerificationFailure; }
+        set autonomyPauseOnVerificationFailure(v: boolean) { this._data.autonomyPauseOnVerificationFailure = v; }
+        get memoryEmbedProvider(): string { return this._data.memoryEmbedProvider; }
+        set memoryEmbedProvider(v: string) { this._data.memoryEmbedProvider = v; }
+        get memoryEmbedModel(): string { return this._data.memoryEmbedModel; }
+        set memoryEmbedModel(v: string) { this._data.memoryEmbedModel = v; }
+        get memoryVectorStore(): string { return this._data.memoryVectorStore; }
+        set memoryVectorStore(v: string) { this._data.memoryVectorStore = v; }
+        get mcpServers(): IAppConfig['mcpServers'] { return this._data.mcpServers; }
+        set mcpServers(v: IAppConfig['mcpServers']) { this._data.mcpServers = v; }
+        get mcpToolTimeoutMs(): number { return this._data.mcpToolTimeoutMs; }
+        set mcpToolTimeoutMs(v: number) { this._data.mcpToolTimeoutMs = v; }
+        get securityAllowExternalTargets(): boolean { return this._data.securityAllowExternalTargets; }
+        set securityAllowExternalTargets(v: boolean) { this._data.securityAllowExternalTargets = v; }
+        get debugVerbose(): boolean { return this._data.debugVerbose; }
+        set debugVerbose(v: boolean) { this._data.debugVerbose = v; }
+        get agentRole(): string { return this._data.agentRole; }
+        set agentRole(v: string) { this._data.agentRole = v; }
 
-	async load(): Promise<void> {
-		try {
-			const raw = await fs.readFile(this.filePath, 'utf8');
-			const parsed = JSON.parse(raw) as Partial<IAppConfig>;
-			this._data = { ...DEFAULT_CONFIG, ...parsed };
-			logger.info(`[AppState] Config loaded from ${this.filePath}`);
-		} catch {
-			logger.info(`[AppState] No config file at ${this.filePath}, using defaults.`);
-		}
-	}
+        async load(): Promise<void> {
+                try {
+                        const raw = await fs.readFile(this.filePath, 'utf8');
+                        const parsed = JSON.parse(raw) as Partial<IAppConfig>;
+                        this._data = { ...DEFAULT_CONFIG, ...parsed };
+                        logger.info(`[AppState] Config loaded from ${this.filePath}`);
+                } catch {
+                        logger.info(`[AppState] No config file at ${this.filePath}, using defaults.`);
+                }
+        }
 
-	async save(): Promise<void> {
-		await fs.writeFile(this.filePath, JSON.stringify(this._data, null, 2), 'utf8');
-		logger.verbose(`[AppState] Config saved to ${this.filePath}`);
-	}
+        async save(): Promise<void> {
+                await fs.writeFile(this.filePath, JSON.stringify(this._data, null, 2), 'utf8');
+                logger.verbose(`[AppState] Config saved to ${this.filePath}`);
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -202,9 +205,9 @@ class FileConfig implements IAppConfig {
 // ---------------------------------------------------------------------------
 
 let _instance: IAppState & {
-	secrets: FileSecrets;
-	workspaceRoots: MutableWorkspaceRoots;
-	config: FileConfig;
+        secrets: FileSecrets;
+        workspaceRoots: MutableWorkspaceRoots;
+        config: FileConfig;
 } | undefined;
 
 /**
@@ -214,29 +217,29 @@ let _instance: IAppState & {
  *   Created if it doesn't exist.
  */
 export async function initAppState(baseDir: string): Promise<void> {
-	if (_instance) {
-		throw new Error('initAppState() called twice — use getAppState() instead.');
-	}
+        if (_instance) {
+                throw new Error('initAppState() called twice — use getAppState() instead.');
+        }
 
-	// Ensure base directory exists.
-	await fs.mkdir(baseDir, { recursive: true });
+        // Ensure base directory exists.
+        await fs.mkdir(baseDir, { recursive: true });
 
-	const secrets = new FileSecrets(baseDir);
-	const workspaceRoots = new MutableWorkspaceRoots();
-	const config = new FileConfig(baseDir);
-	await config.load();
+        const secrets = new FileSecrets(baseDir);
+        const workspaceRoots = new MutableWorkspaceRoots();
+        const config = new FileConfig(baseDir);
+        await config.load();
 
-	// Apply debugVerbose to logger
-	// (logger reads config on each call, but we set it up here for consistency)
+        // Apply debugVerbose to logger
+        // (logger reads config on each call, but we set it up here for consistency)
 
-	_instance = {
-		secrets,
-		workspaceRoots,
-		config,
-		get baseDir() { return baseDir; },
-	};
+        _instance = {
+                secrets,
+                workspaceRoots,
+                config,
+                get baseDir() { return baseDir; },
+        };
 
-	logger.info(`[AppState] Initialized (baseDir: ${baseDir})`);
+        logger.info(`[AppState] Initialized (baseDir: ${baseDir})`);
 }
 
 /**
@@ -244,26 +247,26 @@ export async function initAppState(baseDir: string): Promise<void> {
  * has not been called yet.
  */
 export function getAppState(): IAppState & {
-	secrets: FileSecrets;
-	workspaceRoots: MutableWorkspaceRoots;
-	config: FileConfig;
+        secrets: FileSecrets;
+        workspaceRoots: MutableWorkspaceRoots;
+        config: FileConfig;
 } {
-	if (!_instance) {
-		throw new Error('getAppState() called before initAppState().');
-	}
-	return _instance;
+        if (!_instance) {
+                throw new Error('getAppState() called before initAppState().');
+        }
+        return _instance;
 }
 
 /**
  * Returns true if the app state has been initialized.
  */
 export function isAppStateInitialized(): boolean {
-	return _instance !== undefined;
+        return _instance !== undefined;
 }
 
 /**
  * Reset the app state (for testing only).
  */
 export function _resetAppState(): void {
-	_instance = undefined;
+        _instance = undefined;
 }

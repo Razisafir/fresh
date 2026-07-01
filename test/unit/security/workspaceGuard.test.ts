@@ -106,6 +106,7 @@ describe('workspaceGuard (SEC-4 path traversal defence)', () => {
                         expect(validateToolName('write_file')).to.be.true;
                         expect(validateToolName('edit_file')).to.be.true;
                         expect(validateToolName('list_directory')).to.be.true;
+                        expect(validateToolName('create_directory')).to.be.true;
                         expect(validateToolName('run_command')).to.be.true;
                         expect(validateToolName('search_code')).to.be.true;
                         expect(validateToolName('web_fetch')).to.be.true;
@@ -113,7 +114,7 @@ describe('workspaceGuard (SEC-4 path traversal defence)', () => {
 
                 it('returns false for dropped / unknown tool names', () => {
                         // These were in the old list but are NOT in v0.1 per 02_ARCHITECTURE.md §4.3
-                        expect(validateToolName('create_directory')).to.be.false;
+                        // Note: create_directory was re-added as tool #8
                         expect(validateToolName('search_files')).to.be.false;
                         expect(validateToolName('search_codebase')).to.be.false;
                         expect(validateToolName('web_search')).to.be.false;
