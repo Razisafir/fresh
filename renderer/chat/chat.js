@@ -372,7 +372,7 @@ function addSwarmCompletedCard(summary, workerResults) {
   div.className = 'swarm-completed-card';
 
   const succeeded = workerResults.filter(r => r.success).length;
-  const failed = workerResults.filter(r => !r.success).length;
+  const _failed = workerResults.filter(r => !r.success).length;
 
   const resultsHtml = workerResults.map(r => {
     const statusClass = r.success ? 'success' : 'error';
@@ -490,7 +490,7 @@ function showPendingBar(count) {
 // Agent event handling
 // ---------------------------------------------------------------------------
 
-api.onAgentEvent((event) => {
+api.onAgentEvent(async (event) => {
   switch (event.type) {
     case 'thinking':
       if (!streamingMessage) {
