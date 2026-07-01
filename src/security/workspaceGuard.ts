@@ -141,6 +141,7 @@ export function validateMcpMethod(method: string): boolean {
         const ALLOWED_METHODS = new Set([
                 'initialize', 'tools/list', 'tools/call',
                 'resources/list', 'resources/read',
+                'ping',
         ]);
         return ALLOWED_METHODS.has(method);
 }

@@ -150,6 +150,12 @@ Task: ${task}`;
 export interface IBuildChatPromptOptions {
         /** Absolute path of the workspace root, for the "Working directory" line. */
         workspacePath: string;
+        /**
+         * Optional extra context to append (e.g. sanitised memory entries,
+         * Cognee recall results, skill playbooks). The caller is responsible
+         * for sanitising this content before passing it in (SEC-7 H3 fix).
+         */
+        extraContext?: string;
 }
 
 /**
@@ -164,10 +170,10 @@ export interface IBuildChatPromptOptions {
  * @returns The assembled system prompt string.
  */
 export function buildChatSystemPrompt(options: IBuildChatPromptOptions): string {
-        const { workspacePath } = options;
+        const { workspacePath, extraContext } = options;
         const date = new Date().toISOString().split('T')[0];
 
-        return `You are Kovix, an expert AI coding assistant. You help users with coding tasks by answering questions, writing code, and using tools when needed.
+        let prompt = `You are Kovix, an expert AI coding assistant. You help users with coding tasks by answering questions, writing code, and using tools when needed.
 
 Working directory: ${workspacePath}
 Current date: ${date}
@@ -182,4 +188,12 @@ Guidelines:
 - Ask clarifying questions if the task is ambiguous
 - Prefer running commands over asking the user to run them
 - If no test or build command exists for what you changed, say so explicitly`;
+
+        // Append optional extra context (memory, skills, Cognee recall, etc.).
+        // The caller is responsible for sanitising this content per SEC-7 (H3 fix).
+        if (extraContext && extraContext.trim().length > 0) {
+                prompt += `\n\n[Extra Context]\n${extraContext}`;
+        }
+
+        return prompt;
 }
