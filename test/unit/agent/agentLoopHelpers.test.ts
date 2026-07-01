@@ -19,13 +19,13 @@ import {
         checkCostGate,
         applyCommandSanity,
         consumeCreditsForToolCall,
+        CreditActionType,
         ICreditSystem,
         ICostGovernor,
         IExecutionSanityService,
         ILogger,
         SanitySeverity,
 } from '../../../src/agent/agentLoopHelpers';
-import { DEFAULT_BUDGET, type CreditActionType } from '../../../src/pricing/pricingTypes';
 
 // --- Test stubs -------------------------------------------------------------
 
@@ -63,7 +63,7 @@ function makeCreditSystem(opts: { remaining?: number; consumeResult?: boolean; t
                 },
                 canAfford: () => true,
                 setBudget: () => {},
-                getBudget: () => DEFAULT_BUDGET,
+                getBudget: () => ({}),
                 getUsageHistory: () => [],
                 resetSession: () => {},
                 consumeCalls: calls,
