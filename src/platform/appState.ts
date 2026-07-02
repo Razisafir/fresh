@@ -36,6 +36,7 @@ const DEFAULT_CONFIG: IAppConfig = {
         debugVerbose: false,
         agentRole: 'general',
         uiMode: 'ide',
+        agentMode: 'chat',
         cogneeEnabled: false,
         cogneePythonPath: 'python3',
         cogneeGraphDb: 'kuzu',
@@ -192,6 +193,8 @@ class FileConfig implements IAppConfig {
         set agentRole(v: string) { this._data.agentRole = v; }
         get uiMode(): IAppConfig['uiMode'] { return this._data.uiMode; }
         set uiMode(v: IAppConfig['uiMode']) { this._data.uiMode = v; }
+        get agentMode(): IAppConfig['agentMode'] { return this._data.agentMode; }
+        set agentMode(v: IAppConfig['agentMode']) { this._data.agentMode = v; }
         get cogneeEnabled(): boolean { return this._data.cogneeEnabled; }
         set cogneeEnabled(v: boolean) { this._data.cogneeEnabled = v; }
         get cogneePythonPath(): string { return this._data.cogneePythonPath; }
