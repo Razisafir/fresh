@@ -44,7 +44,7 @@ class KovixTerminal {
       <div class="terminal-header-actions">
         <button class="terminal-btn" id="terminal-btn-new" title="New Terminal (+)">+</button>
         <button class="terminal-btn" id="terminal-btn-trash" title="Kill Active Terminal">&#128465;</button>
-        <button class="terminal-btn" id="terminal-btn-collapse" title="Toggle Terminal (Ctrl+`)">&#9660;</button>
+        <button class="terminal-btn" id="terminal-btn-collapse" title="Toggle Terminal (Ctrl+\`)">&#9660;</button>
       </div>
     `;
     this.container.appendChild(this.header);
@@ -188,7 +188,7 @@ class KovixTerminal {
   /** Switch to a terminal tab */
   switchTo(id) {
     // Hide all
-    for (const [termId, term] of this.terminals) {
+    for (const [_termId, term] of this.terminals) {
       term.containerEl.style.display = 'none';
       term.tabEl.classList.remove('active');
     }

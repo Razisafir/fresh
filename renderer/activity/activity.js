@@ -357,7 +357,7 @@ class AgentActivityPanel {
 
     // File operations
     if (type === 'file_written') {
-      const entry = this._addEntry({
+      const _entry = this._addEntry({
         type: 'file_written',
         icon: config.icon,
         label: this._shortenPath(event.filePath),

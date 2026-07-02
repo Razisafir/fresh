@@ -144,6 +144,9 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         ...globals.browser,
+        DOMPurify: 'readonly',
+        Terminal: 'readonly',
+        FitAddon: 'readonly',
       },
     },
     rules: {
