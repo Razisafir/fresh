@@ -1072,6 +1072,18 @@
         if (fileTree.workspaceRoot) fileTree.refresh();
       });
 
+      // File watcher events — refresh tree when files change on disk
+      // Debounced to avoid excessive refreshes during bulk operations
+      let _treeRefreshTimer = null;
+      function debouncedTreeRefresh() {
+        if (!fileTree.workspaceRoot) return;
+        if (_treeRefreshTimer) clearTimeout(_treeRefreshTimer);
+        _treeRefreshTimer = setTimeout(() => { fileTree.refresh(); }, 500);
+      }
+      api.onFileChanged(debouncedTreeRefresh);
+      api.onFileCreated(debouncedTreeRefresh);
+      api.onFileDeleted(debouncedTreeRefresh);
+
       // Resize handles
       setupResizeHandles();
 
