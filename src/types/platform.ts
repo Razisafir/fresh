@@ -61,46 +61,18 @@ export interface IAppConfig {
         memoryEmbedModel: string;
         /** Vector store backend (default: 'in-process'). */
         memoryVectorStore: string;
-        /** MCP server configurations (stdio and SSE transport supported). */
-        mcpServers: Array<{
-                name: string;
-                transport?: 'stdio' | 'sse';
-                command?: string;
-                args?: string[];
-                env?: Record<string, string>;
-                cwd?: string;
-                url?: string;
-                headers?: Record<string, string>;
-                reconnect?: boolean;
-                maxReconnectAttempts?: number;
-                reconnectBaseDelayMs?: number;
-        }>;
+        /** MCP server configurations. */
+        mcpServers: Array<{ name: string; command: string; args?: string[]; env?: Record<string, string> }>;
         /** MCP tool timeout in ms (default: 30000). */
         mcpToolTimeoutMs: number;
         /** Allow external targets for web_fetch (default: false). */
         securityAllowExternalTargets: boolean;
         /** Verbose logging (default: false). */
         debugVerbose: boolean;
-        /** Active agent role (default: 'general'). */
-        agentRole: string;
-        /** UI layout mode: ide (3-pane) or chat (centered) (default: 'ide'). */
-        uiMode: 'ide' | 'chat';
         /** Active agent mode: chat, plan, or refine (default: 'chat'). */
         agentMode: 'chat' | 'plan' | 'refine';
-        /** Cognee knowledge-graph integration (default: disabled). */
-        cogneeEnabled: boolean;
-        /** Path to Python executable for Cognee (default: 'python3'). */
-        cogneePythonPath: string;
-        /** Graph database for Cognee (default: 'kuzu'). */
-        cogneeGraphDb: 'kuzu' | 'neo4j';
-        /** Embedding provider for Cognee (default: 'ollama'). */
-        cogneeEmbedProvider: 'ollama' | 'openai';
-        /** Skill directories to scan for user-defined skills (default: []). */
-        skillDirectories: string[];
-        /** Whether to auto-discover skills from ~/.kovix/skills/ (default: true). */
-        skillAutoDiscover: boolean;
-        /** Default skills to activate on startup (default: all built-in). */
-        skillAutoActivate: boolean;
+        /** UI layout mode: ide (3-pane) or chat (centered) (default: 'ide'). */
+        uiMode: 'ide' | 'chat';
 }
 
 // ---------------------------------------------------------------------------

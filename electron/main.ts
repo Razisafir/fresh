@@ -32,12 +32,11 @@ import { getSwarmOrchestrator, resolveSwarmApproval } from '../src/swarm/orchest
 import { getGitService } from '../src/git';
 import { initConversationStore, getConversationStore } from '../src/memory/conversationStore';
 import { initCodebaseIndexer, getCodebaseIndexer } from '../src/memory/codebaseIndexer';
-import { initCogneeService, getCogneeService } from '../src/memory/cogneeIntegration';
-import { registerCogneeTools } from '../src/memory/cogneeTools';
-import { initSkillRegistry } from '../src/skills';
 import { getFileWatcherService } from '../src/platform/fileWatcher';
 import { logger } from '../src/util/logger';
 import type { IApprovedPlan, AgentLoopEvent } from '../src/types/agent';
+import { getPipelineOrchestrator, resetPipelineOrchestrator } from '../src/agent/pipelineOrchestrator';
+import type { IPreFlightConfig, PipelineEvent } from '../src/types/spec';
 
 // ---------------------------------------------------------------------------
 // Globals
@@ -51,19 +50,6 @@ let _activeAbortController: AbortController | null = null;
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Global error handlers (production hardening)
-// ---------------------------------------------------------------------------
-
-process.on('uncaughtException', (err: Error) => {
-        logger.error(`[Main] Uncaught exception: ${err.message}\n${err.stack ?? ''}`);
-});
-
-process.on('unhandledRejection', (reason: unknown) => {
-        const msg = reason instanceof Error ? `${reason.message}\n${reason.stack ?? ''}` : String(reason);
-        logger.error(`[Main] Unhandled rejection: ${msg}`);
-});
 
 app.whenReady().then(async () => {
         logger.info('Kovix starting up (Electron standalone — Phase 0 pivot, D-015).');
@@ -98,11 +84,6 @@ app.whenReady().then(async () => {
         const registry = initToolRegistry();
         logger.info(`[Main] ToolRegistry initialized with ${registry.listTools().length} built-in tools.`);
 
-        // 4a. Skill registry — after ToolRegistry, before AgentLoop.
-        // Note: initSkillRegistry() calls registerBuiltinSkills() internally.
-        const skillRegistry = initSkillRegistry();
-        logger.info(`[Main] SkillRegistry initialized with ${skillRegistry.listSkills().length} skills.`);
-
         // 5. Agent loop.
         const workspaceRoots = {
                 getWorkspaceRoots: () => state.workspaceRoots.roots,
@@ -133,34 +114,6 @@ app.whenReady().then(async () => {
         // 9. Codebase indexer (RAG).
         initCodebaseIndexer(stateDir);
         logger.info('[Main] Codebase indexer initialized.');
-
-        // 9a. Cognee knowledge-graph service — after MemoryService.
-        try {
-                await initCogneeService();
-                const cogneeSvc = getCogneeService();
-                if (cogneeSvc.isAvailable()) {
-                        // Register Cognee tools into the tool registry.
-                        registerCogneeTools(registry);
-                        logger.info('[Main] Cognee service initialized and tools registered.');
-                } else {
-                        logger.info('[Main] Cognee service initialized but not available — tools not registered.');
-                }
-        } catch (err) {
-                logger.warn(`[Main] Cognee service initialization failed: ${err instanceof Error ? err.message : String(err)}. Continuing without Cognee.`);
-        }
-
-        // 9b. Activate all default skills — after SkillRegistry + Cognee.
-        try {
-                const skillContext = {
-                        toolRegistry: registry,
-                        config: {},
-                        workspaceRoots: [...state.workspaceRoots.roots],
-                };
-                await skillRegistry.activateAll(skillContext);
-                logger.info(`[Main] ${skillRegistry.getActiveSkills().length} skills activated.`);
-        } catch (err) {
-                logger.warn(`[Main] Skill activation had errors: ${err instanceof Error ? err.message : String(err)}`);
-        }
 
         // 10. File watcher.
         const fileWatcher = getFileWatcherService();
@@ -220,7 +173,7 @@ function createWindow(): void {
                         preload: path.join(__dirname, 'preload.js'),
                         contextIsolation: true,
                         nodeIntegration: false,
-                        sandbox: true,
+                        sandbox: false,
                 },
         });
 
@@ -286,15 +239,7 @@ function registerIpcHandlers(): void {
         });
 
         // ---- Secrets ----
-        ipcMain.handle('secrets:has', async (_event, key: string) => {
-                if (!isAppStateInitialized()) return false;
-                const value = await getAppState().secrets.get(key);
-                return value !== undefined && value !== null && value !== '';
-        });
-
         ipcMain.handle('secrets:get', async (_event, key: string) => {
-                // SECURITY: Only expose secrets to renderer for provider key setup.
-                // Consider migrating to secrets:has + main-process-only usage.
                 if (!isAppStateInitialized()) return undefined;
                 return getAppState().secrets.get(key);
         });
@@ -449,95 +394,12 @@ function registerIpcHandlers(): void {
                         { type: 'openai', displayName: 'OpenAI', activeModel: aiService?.getProvider('openai')?.getActiveModel()?.id ?? '' },
                         { type: 'ollama', displayName: 'Ollama (Local)', activeModel: aiService?.getProvider('ollama')?.getActiveModel()?.id ?? '' },
                         { type: 'deepseek', displayName: 'DeepSeek', activeModel: aiService?.getProvider('deepseek')?.getActiveModel()?.id ?? '' },
-                        { type: 'groq', displayName: 'Groq', activeModel: aiService?.getProvider('groq')?.getActiveModel()?.id ?? '' },
-                        { type: 'mistral', displayName: 'Mistral', activeModel: aiService?.getProvider('mistral')?.getActiveModel()?.id ?? '' },
-                        { type: 'gemini', displayName: 'Gemini', activeModel: aiService?.getProvider('gemini')?.getActiveModel()?.id ?? '' },
-                        { type: 'together', displayName: 'Together AI', activeModel: aiService?.getProvider('together')?.getActiveModel()?.id ?? '' },
-                        { type: 'lm-studio', displayName: 'LM Studio (Local)', activeModel: aiService?.getProvider('lm-studio')?.getActiveModel()?.id ?? '' },
                 ];
         });
 
         ipcMain.handle('agent:getActiveProvider', async () => {
                 if (!aiService) return 'anthropic';
                 return aiService.activeProviderType ?? 'anthropic';
-        });
-
-        // ---- Agent roles ----
-        ipcMain.handle('agent:listRoles', async () => {
-                const { AGENT_ROLE_CONFIGS } = require('../src/agent/agentRoles') as typeof import('../src/agent/agentRoles');
-                return Object.values(AGENT_ROLE_CONFIGS).map(cfg => ({
-                        role: cfg.role,
-                        label: cfg.label,
-                        description: cfg.description,
-                        icon: cfg.icon,
-                        color: cfg.color,
-                        defaultExecutionMode: cfg.defaultExecutionMode,
-                }));
-        });
-
-        ipcMain.handle('agent:setRole', async (_event: Electron.IpcMainInvokeEvent, role: string) => {
-                if (!isAppStateInitialized()) return false;
-                const { AgentRole } = require('../src/agent/agentRoles') as typeof import('../src/agent/agentRoles');
-                const validRoles = new Set<string>(Object.values(AgentRole));
-                if (!validRoles.has(role)) return false;
-                getAppState().config.agentRole = role;
-                await getAppState().config.save();
-                return true;
-        });
-
-        ipcMain.handle('agent:getRole', async () => {
-                if (!isAppStateInitialized()) return 'general';
-                return getAppState().config.agentRole || 'general';
-        });
-
-        // ---- Agent slash commands ----
-        ipcMain.handle('agent:listSlashCommands', async () => {
-                const { BUILTIN_SLASH_COMMANDS } = require('../src/agent/slashCommands') as typeof import('../src/agent/slashCommands');
-                return BUILTIN_SLASH_COMMANDS.map(cmd => ({
-                        name: cmd.name,
-                        description: cmd.description,
-                        usage: cmd.usage,
-                        shortcut: cmd.shortcut ?? null,
-                }));
-        });
-
-        // ---- Telemetry ----
-        ipcMain.handle('telemetry:getUsageLog', async (_event: Electron.IpcMainInvokeEvent, options?: { limit?: number; event?: string }) => {
-                const { getTelemetryService } = require('../src/telemetry/localUsageLog') as typeof import('../src/telemetry/localUsageLog');
-                const { parseTelemetryLine } = require('../src/telemetry/localUsageLogHelpers') as typeof import('../src/telemetry/localUsageLogHelpers');
-                const fsSync = require('fs') as typeof import('fs');
-                const logPath = getTelemetryService().logFilePath;
-                try {
-                        if (!fsSync.existsSync(logPath)) return [];
-                        const raw = fsSync.readFileSync(logPath, 'utf8');
-                        const lines = raw.split('\n').filter(l => l.trim());
-                        let entries = lines.map(l => parseTelemetryLine(l)).filter((e): e is import('../src/telemetry/telemetryTypes').ITelemetryEvent => e !== null);
-                        if (options?.event) {
-                                entries = entries.filter(e => e.event === options.event);
-                        }
-                        if (options?.limit && options.limit > 0) {
-                                entries = entries.slice(-options.limit);
-                        }
-                        return entries;
-                } catch {
-                        return [];
-                }
-        });
-
-        ipcMain.handle('telemetry:getSummary', async () => {
-                const { getTelemetryService } = require('../src/telemetry/localUsageLog') as typeof import('../src/telemetry/localUsageLog');
-                const { parseTelemetryLine, buildSessionSummary } = require('../src/telemetry/localUsageLogHelpers') as typeof import('../src/telemetry/localUsageLogHelpers');
-                const fsSync = require('fs') as typeof import('fs');
-                const logPath = getTelemetryService().logFilePath;
-                try {
-                        if (!fsSync.existsSync(logPath)) return buildSessionSummary([]);
-                        const raw = fsSync.readFileSync(logPath, 'utf8');
-                        const lines = raw.split('\n').filter(l => l.trim());
-                        const entries = lines.map(l => parseTelemetryLine(l)).filter((e): e is import('../src/telemetry/telemetryTypes').ITelemetryEvent => e !== null);
-                        return buildSessionSummary(entries);
-                } catch {
-                        return buildSessionSummary([]);
-                }
         });
 
         // ---- Pending changes ----
@@ -663,9 +525,6 @@ function registerIpcHandlers(): void {
         });
 
         ipcMain.handle('credits:add', async (_event: Electron.IpcMainInvokeEvent, amount: number) => {
-                if (typeof amount !== 'number' || amount <= 0) {
-                        return { error: 'amount must be a positive number' };
-                }
                 getCreditSystem().addCredits(amount);
                 return { success: true };
         });
@@ -704,53 +563,43 @@ function registerIpcHandlers(): void {
         });
 
         ipcMain.handle('git:stage', async (_event, repoPath: string, filePaths: string[]) => {
-                try { await gitService.stage(repoPath, filePaths); return { success: true }; }
-                catch (e) { return { error: (e as Error).message }; }
+                await gitService.stage(repoPath, filePaths);
         });
 
         ipcMain.handle('git:unstage', async (_event, repoPath: string, filePaths: string[]) => {
-                try { await gitService.unstage(repoPath, filePaths); return { success: true }; }
-                catch (e) { return { error: (e as Error).message }; }
+                await gitService.unstage(repoPath, filePaths);
         });
 
         ipcMain.handle('git:commit', async (_event, repoPath: string, message: string) => {
-                try { return await gitService.commit(repoPath, message); }
-                catch (e) { return { error: (e as Error).message }; }
+                return await gitService.commit(repoPath, message);
         });
 
         ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string) => {
-                try { await gitService.checkout(repoPath, branch); return { success: true }; }
-                catch (e) { return { error: (e as Error).message }; }
+                await gitService.checkout(repoPath, branch);
         });
 
         ipcMain.handle('git:createBranch', async (_event, repoPath: string, name: string, checkout?: boolean) => {
-                try { await gitService.createBranch(repoPath, name, checkout); return { success: true }; }
-                catch (e) { return { error: (e as Error).message }; }
+                await gitService.createBranch(repoPath, name, checkout);
         });
 
         ipcMain.handle('git:deleteBranch', async (_event, repoPath: string, name: string, force?: boolean) => {
-                try { await gitService.deleteBranch(repoPath, name, force); return { success: true }; }
-                catch (e) { return { error: (e as Error).message }; }
+                await gitService.deleteBranch(repoPath, name, force);
         });
 
         ipcMain.handle('git:pull', async (_event, repoPath: string, remote?: string, branch?: string) => {
-                try { return await gitService.pull(repoPath, remote, branch); }
-                catch (e) { return { error: (e as Error).message }; }
+                return await gitService.pull(repoPath, remote, branch);
         });
 
         ipcMain.handle('git:push', async (_event, repoPath: string, remote?: string, branch?: string) => {
-                try { await gitService.push(repoPath, remote, branch); return { success: true }; }
-                catch (e) { return { error: (e as Error).message }; }
+                await gitService.push(repoPath, remote, branch);
         });
 
         ipcMain.handle('git:stash', async (_event, repoPath: string, message?: string) => {
-                try { await gitService.stash(repoPath, message); return { success: true }; }
-                catch (e) { return { error: (e as Error).message }; }
+                await gitService.stash(repoPath, message);
         });
 
         ipcMain.handle('git:stashPop', async (_event, repoPath: string) => {
-                try { await gitService.stashPop(repoPath); return { success: true }; }
-                catch (e) { return { error: (e as Error).message }; }
+                await gitService.stashPop(repoPath);
         });
 
         ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string) => {
@@ -771,51 +620,36 @@ function registerIpcHandlers(): void {
 
         // ---- Conversation store ----
         ipcMain.handle('conversation:list', async () => {
-                try { return await getConversationStore().listConversations(); }
-                catch (e) { return { error: (e as Error).message }; }
+                return await getConversationStore().listConversations();
         });
 
         ipcMain.handle('conversation:load', async (_event, id: string) => {
-                try { return await getConversationStore().loadConversation(id); }
-                catch (e) { return { error: (e as Error).message }; }
+                return await getConversationStore().loadConversation(id);
         });
 
         ipcMain.handle('conversation:create', async (_event, title?: string) => {
-                try { return await getConversationStore().createConversation(title); }
-                catch (e) { return { error: (e as Error).message }; }
+                return await getConversationStore().createConversation(title);
         });
 
         ipcMain.handle('conversation:delete', async (_event, id: string) => {
-                try { await getConversationStore().deleteConversation(id); return { success: true }; }
-                catch (e) { return { error: (e as Error).message }; }
+                await getConversationStore().deleteConversation(id);
         });
 
         ipcMain.handle('conversation:getActive', async () => {
-                try { return await getConversationStore().getActiveConversation(); }
-                catch (e) { return { error: (e as Error).message }; }
+                return await getConversationStore().getActiveConversation();
         });
 
         ipcMain.handle('conversation:setActive', async (_event, id: string) => {
-                try { await getConversationStore().setActiveConversation(id); return { success: true }; }
-                catch (e) { return { error: (e as Error).message }; }
+                await getConversationStore().setActiveConversation(id);
         });
 
         ipcMain.handle('conversation:addMessage', async (_event, conversationId: string, message: unknown) => {
-                try {
-                        const stored = message as Record<string, unknown>;
-                        const validRoles = ['user', 'assistant', 'system'] as const;
-                        const role = validRoles.includes(stored.role as typeof validRoles[number])
-                                ? stored.role as 'user' | 'assistant' | 'system'
-                                : 'user'; // Safe default
-                        const chatMsg: import('../src/types/llm').IChatMessage = {
-                                role,
-                                content: String(stored.content ?? ''),
-                        };
-                        await getConversationStore().addMessage(conversationId, chatMsg);
-                        return { success: true };
-                } catch (e) {
-                        return { error: (e as Error).message };
-                }
+                const stored = message as import('../src/memory/conversationStore').IStoredMessage;
+                const chatMsg: import('../src/types/llm').IChatMessage = {
+                        role: stored.role as 'user' | 'assistant' | 'system',
+                        content: stored.content,
+                };
+                await getConversationStore().addMessage(conversationId, chatMsg);
         });
 
         // ---- Codebase indexer ----
@@ -848,6 +682,206 @@ function registerIpcHandlers(): void {
 
         ipcMain.handle('watcher:stop', async () => {
                 getFileWatcherService().stopWatching();
+        });
+
+        // ---- Pipeline (Idea-to-Execution) ----
+        ipcMain.handle('pipeline:startRefinement', async (_event, rawIdea: string) => {
+                if (!aiService) return { error: 'AI service not initialized' };
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService,
+                                agentDeps: {
+                                        aiService,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+
+                        // Forward pipeline events to renderer
+                        pipeline.onEvent((event: PipelineEvent) => {
+                                sendToRenderer('pipeline:event', event);
+                        });
+
+                        const response = await pipeline.startRefinement(rawIdea);
+                        return { success: true, response, spec: pipeline.state.spec };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:continueRefinement', async (_event, userInput: string) => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        const response = await pipeline.continueRefinement(userInput);
+                        return { success: true, response, spec: pipeline.state.spec };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:approveSpec', async () => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        const spec = pipeline.approveSpec();
+
+                        // Auto-generate plan after spec approval
+                        const plan = await pipeline.generatePlan();
+                        return { success: true, spec, plan };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:rejectSpec', async (_event, feedback: string) => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        pipeline.rejectSpec(feedback);
+                        return { success: true };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:configurePreFlight', async (_event, config: IPreFlightConfig) => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        pipeline.configurePreFlight(config);
+                        return { success: true };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:execute', async () => {
+                if (!aiService) return { error: 'AI service not initialized' };
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService,
+                                agentDeps: {
+                                        aiService,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+
+                        const stream = pipeline.executePlan();
+                        for await (const event of stream) {
+                                sendToRenderer('pipeline:event', event);
+                        }
+                        return { success: true, state: pipeline.state };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:abort', async () => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        pipeline.abort();
+                        return { success: true };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:getState', async () => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        return pipeline.state;
+                } catch {
+                        return { phase: 'idle', spec: null, plan: null, preflightConfig: null, completedMilestones: 0, totalMilestones: 0, error: null };
+                }
+        });
+
+        ipcMain.handle('pipeline:startV2Refinement', async (_event, v2Feedback: string) => {
+                if (!aiService) return { error: 'AI service not initialized' };
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService,
+                                agentDeps: {
+                                        aiService,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        const response = await pipeline.startV2Refinement(v2Feedback);
+                        return { success: true, response, spec: pipeline.state.spec };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:reset', async () => {
+                resetPipelineOrchestrator();
+                return { success: true };
         });
 
         // ---- Window controls (for frameless title bar) ----

@@ -7,8 +7,6 @@
  * State machine: idle → planning → awaiting_approval → executing → complete
  */
 
-/* global DOMPurify */
-
 // ---------------------------------------------------------------------------
 // API handle
 // ---------------------------------------------------------------------------
@@ -53,7 +51,7 @@ let state = 'idle'; // idle | planning | awaiting_approval | executing | swarm_e
 let currentMode = 'chat'; // 'chat' | 'plan' | 'swarm'
 let _currentPlan = null;
 let streamingMessage = null;
-let activeProvider = 'anthropic'; // Any AIProviderType value
+let activeProvider = 'anthropic'; // 'anthropic' | 'nvidia-nim' | 'openrouter'
 
 // ---- Swarm state ----
 let _swarmWorkers = {};      // { agentId: { name, status, steps, filesModified, summary } }
@@ -101,21 +99,13 @@ function renderMarkdown(text) {
     // Numbered lists
     .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
     // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
     // Paragraphs (double newline)
     .replace(/\n\n/g, '</p><p>')
     // Single newlines within paragraphs
     .replace(/\n/g, '<br>');
   // Wrap loose <li> in <ul>
   html = html.replace(/(<li>.*?<\/li>)+/gs, '<ul>$&</ul>');
-  // SECURITY: Sanitize HTML to prevent XSS from LLM output
-  if (typeof DOMPurify !== 'undefined') {
-    html = DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'h2', 'h3', 'h4', 'pre', 'code', 'ul', 'li', 'a'],
-      ALLOWED_ATTR: ['href', 'target', 'rel'],
-      ALLOW_DATA_ATTR: false,
-    });
-  }
   return '<p>' + html + '</p>';
 }
 
@@ -234,7 +224,6 @@ function escapeHtml(text) {
   if (!text) return '';
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
-
 
 // ---- Swarm UI helpers ----
 
@@ -404,7 +393,7 @@ function addSwarmCompletedCard(summary, workerResults) {
   div.innerHTML = `
     <div class="swarm-partition-header">
       <span class="swarm-icon">&#9881;</span>
-      <h3>Swarm Complete: ${succeeded}/${workerResults.length} succeeded${_failed > 0 ? `, ${_failed} failed` : ''}</h3>
+      <h3>Swarm Complete: ${succeeded}/${workerResults.length} succeeded</h3>
     </div>
     <div class="swarm-results-list">${resultsHtml}</div>
   `;
@@ -691,6 +680,75 @@ api.onSwarmEvent((event) => {
 });
 
 // ---------------------------------------------------------------------------
+// Pipeline event handling (Idea-to-Execution)
+// ---------------------------------------------------------------------------
+
+api.onPipelineEvent((event) => {
+  switch (event.type) {
+    case 'refinement_started':
+      addMessage('system', '🔍 Refinement started...');
+      break;
+    case 'refinement_round':
+      addMessage('system', `Round ${event.round}: ${event.question.slice(0, 100)}...`);
+      break;
+    case 'spec_updated':
+      if (event.spec) {
+        updateSpecCard(event.spec);
+        if (!_pipelineComplete) {
+          addMessage('system', `📝 Spec updated: ${event.spec.name} v${event.spec.version} (${event.spec.requirements.length} requirements)`);
+        }
+      }
+      break;
+    case 'spec_approved':
+      addMessage('system', `✅ Spec approved: ${event.spec.name}`);
+      break;
+    case 'plan_ready':
+      addMessage('system', `📋 Plan ready: ${event.milestoneCount} milestones, ${event.totalSteps} steps, ~${event.estimatedCredits} credits`);
+      break;
+    case 'preflight_configured':
+      addMessage('system', '⚙️ Pre-flight configured. Ready to execute.');
+      break;
+    case 'execution_started':
+      _pipelineComplete = false;
+      showPipelineProgress(0, event.totalMilestones, 'Execution starting...');
+      addMessage('system', `🚀 Execution started: ${event.totalMilestones} milestones`);
+      break;
+    case 'milestone_progress':
+      showPipelineProgress(event.completedMilestones, event.totalMilestones, event.currentMilestone);
+      break;
+    case 'swarm_started':
+      addMessage('system', `🐝 Swarm deployed: ${event.workerCount} workers`);
+      break;
+    case 'swarm_worker_update':
+      // Could update a swarm panel here — for now just log
+      break;
+    case 'execution_complete':
+      _pipelineComplete = true;
+      _hidePipelineProgress();
+      if (event.spec) {
+        updateSpecCard(event.spec);
+      }
+      _showCompletionCard(event.spec, event.allRequirementsMet);
+      addMessage('system', event.allRequirementsMet
+        ? '✅ All requirements satisfied!'
+        : '⚠️ Partial completion — some requirements not met.');
+      setState('idle');
+      break;
+    case 'v2_prompt':
+      // The v2 prompt is already shown via the completion card's "Run it again" button
+      addMessage('system', `🔄 v2 refinement available: ${event.unsatisfiedRequirements?.length || 0} unsatisfied requirements`);
+      break;
+    case 'pipeline_error':
+      addMessage('system', `❌ Pipeline error: ${event.error}${event.recoverable ? ' (recoverable)' : ''}`);
+      if (!event.recoverable) {
+        _hidePipelineProgress();
+        setState('idle');
+      }
+      break;
+  }
+});
+
+// ---------------------------------------------------------------------------
 // User actions
 // ---------------------------------------------------------------------------
 
@@ -712,16 +770,37 @@ async function sendTask() {
       setState('idle');
     }
   } else if (currentMode === 'refine') {
-    // Refine mode: send to refinement pipeline
+    // Refine mode: send to pipeline refinement
     setState('executing');
     _refinementActive = true;
     addMessage('system', '🔍 Refining your idea into a structured spec...');
-    const result = await api.sendTask(text);
-    if (result.error) {
-      addMessage('system', `❌ ${result.error}`);
+    try {
+      if (_currentSpec && _refinementActive) {
+        // Continue refinement conversation
+        const result = await api.pipelineContinueRefinement(text);
+        if (result.error) {
+          addMessage('system', `❌ ${result.error}`);
+          setState('idle');
+        } else if (result.spec) {
+          updateSpecCard(result.spec);
+          addMessage('agent', result.response);
+        }
+      } else {
+        // Start new refinement
+        const result = await api.pipelineStartRefinement(text);
+        if (result.error) {
+          addMessage('system', `❌ ${result.error}`);
+          setState('idle');
+        } else if (result.spec) {
+          updateSpecCard(result.spec);
+          addMessage('agent', result.response);
+        }
+      }
+    } catch (err) {
+      addMessage('system', `❌ Pipeline error: ${err.message || err}`);
       setState('idle');
     }
-    // The spec card will be updated when the refinement events come back
+    setState('idle');
   } else if (currentMode === 'swarm') {
     // Swarm mode: plan first, then auto-offer swarm partition
     setState('planning');
@@ -920,13 +999,26 @@ function _showCompletionCard(spec, allMet) {
     const v2Btn = document.createElement('button');
     v2Btn.className = 'btn-small btn-primary';
     v2Btn.textContent = 'Run it again (v2)';
-    v2Btn.addEventListener('click', () => {
+    v2Btn.addEventListener('click', async () => {
       currentMode = 'refine';
       document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('btn-mode-refine').classList.add('active');
       updatePlaceholder();
-      inputBox.value = 'I want to refine the spec based on execution results';
-      inputBox.focus();
+
+      // Start v2 refinement with pipeline backend
+      try {
+        addMessage('system', '🔄 Starting v2 refinement based on execution results...');
+        const unsatisfiedReqs = spec.requirements.filter(r => !r.satisfied).map(r => `[${r.priority}] ${r.label}: ${r.description}`).join('\n');
+        const result = await api.pipelineStartV2Refinement(`Unsatisfied requirements from previous run:\n${unsatisfiedReqs}\n\nPlease update the spec to address these gaps.`);
+        if (result.error) {
+          addMessage('system', `❌ v2 refinement failed: ${result.error}`);
+        } else if (result.spec) {
+          updateSpecCard(result.spec);
+          addMessage('agent', result.response);
+        }
+      } catch (err) {
+        addMessage('system', `❌ v2 pipeline error: ${err.message || err}`);
+      }
     });
     actions.appendChild(v2Btn);
   }
@@ -937,22 +1029,40 @@ function _showCompletionCard(spec, allMet) {
 }
 
 // ---- Approve/Reject spec buttons ----
-document.getElementById('btn-approve-spec').addEventListener('click', () => {
+document.getElementById('btn-approve-spec').addEventListener('click', async () => {
   if (!_currentSpec) return;
-  // Transition to planning state after spec approval
   addMessage('system', `✅ Spec approved: **${_currentSpec.name}** v${_currentSpec.version}. Generating plan...`);
   document.getElementById('spec-card').classList.add('hidden');
   state = 'planning';
-  // The actual plan generation will be handled by the backend pipeline
-  // For now, show the preflight card as a demo
-  document.getElementById('preflight-card').classList.remove('hidden');
   _refinementActive = false;
+
+  try {
+    const result = await api.pipelineApproveSpec();
+    if (result.error) {
+      addMessage('system', `❌ Plan generation failed: ${result.error}`);
+      setState('idle');
+      return;
+    }
+    if (result.plan) {
+      addMessage('system', `📋 Plan generated: ${result.plan.steps?.length || 0} steps, ${result.plan.milestones?.length || 0} milestones.`);
+      // Show the preflight card for execution config
+      document.getElementById('preflight-card').classList.remove('hidden');
+    }
+  } catch (err) {
+    addMessage('system', `❌ Pipeline error: ${err.message || err}`);
+    setState('idle');
+  }
 });
 
-document.getElementById('btn-reject-spec').addEventListener('click', () => {
+document.getElementById('btn-reject-spec').addEventListener('click', async () => {
   if (!_currentSpec) return;
   addMessage('system', '🔄 Spec revision requested. Continue refining...');
   _refinementActive = true;
+  try {
+    await api.pipelineRejectSpec('User requested revisions');
+  } catch (_err) {
+    // Non-critical — just log
+  }
 });
 
 // ---- Pre-flight card ----
@@ -960,7 +1070,7 @@ document.getElementById('preflight-allow-swarm').addEventListener('change', (e) 
   document.getElementById('preflight-workers-row').style.display = e.target.checked ? 'flex' : 'none';
 });
 
-document.getElementById('btn-execute-preflight').addEventListener('click', () => {
+document.getElementById('btn-execute-preflight').addEventListener('click', async () => {
   const config = {
     executionMode: document.getElementById('preflight-exec-mode').value,
     creditLimit: parseInt(document.getElementById('preflight-credit-limit').value) || 200,
@@ -973,6 +1083,26 @@ document.getElementById('btn-execute-preflight').addEventListener('click', () =>
   addMessage('system', `🚀 Executing with config: mode=${config.executionMode}, credits≤${config.creditLimit}${config.allowSwarm ? `, swarm=${config.maxWorkers} workers` : ''}`);
   state = 'executing';
   showPipelineProgress(0, 1, 'Starting execution...');
+
+  try {
+    // Configure preflight first
+    const configResult = await api.pipelineConfigurePreFlight(config);
+    if (configResult.error) {
+      addMessage('system', `❌ Pre-flight config failed: ${configResult.error}`);
+      setState('idle');
+      _hidePipelineProgress();
+      return;
+    }
+    // Then execute
+    const result = await api.pipelineExecute();
+    if (result.error) {
+      addMessage('system', `❌ Execution failed: ${result.error}`);
+    }
+  } catch (err) {
+    addMessage('system', `❌ Pipeline execution error: ${err.message || err}`);
+  }
+  setState('idle');
+  _hidePipelineProgress();
 });
 
 document.getElementById('btn-cancel-preflight').addEventListener('click', () => {
@@ -1009,46 +1139,23 @@ btnRejectAll.addEventListener('click', async () => {
   await api.rejectAllChanges();
 });
 
-// Provider metadata — maps provider type to secret key, display name, and whether a key is required
-const PROVIDER_META = {
-  'anthropic':   { secretKey: 'kovix.apiKey.anthropic',   label: 'Anthropic',     needsKey: true },
-  'nvidia-nim':  { secretKey: 'kovix.apiKey.nvidia-nim',  label: 'NVIDIA NIM',    needsKey: true },
-  'openrouter':  { secretKey: 'kovix.apiKey.openrouter',  label: 'OpenRouter',    needsKey: true },
-  'openai':      { secretKey: 'kovix.apiKey.openai',      label: 'OpenAI',        needsKey: true },
-  'ollama':      { secretKey: null,                        label: 'Ollama (Local)',needsKey: false },
-  'deepseek':    { secretKey: 'kovix.apiKey.deepseek',    label: 'DeepSeek',      needsKey: true },
-  'groq':        { secretKey: 'kovix.apiKey.groq',        label: 'Groq',          needsKey: true },
-  'mistral':     { secretKey: 'kovix.apiKey.mistral',     label: 'Mistral',       needsKey: true },
-  'gemini':      { secretKey: 'kovix.apiKey.gemini',      label: 'Gemini',        needsKey: true },
-  'together':    { secretKey: 'kovix.apiKey.together',    label: 'Together AI',   needsKey: true },
-  'lm-studio':   { secretKey: null,                        label: 'LM Studio',     needsKey: false },
-};
-
-function getProviderMeta(type) {
-  return PROVIDER_META[type] || { secretKey: `kovix.apiKey.${type}`, label: type, needsKey: true };
-}
-
 // API key modal
 btnSaveKey.addEventListener('click', async () => {
   const key = apiKeyInput.value.trim();
   const selectedProvider = apiKeyProvider ? apiKeyProvider.value : 'anthropic';
-  const meta = getProviderMeta(selectedProvider);
-  if (meta.needsKey && key) {
-    await api.setSecret(meta.secretKey, key);
-  } else if (!meta.needsKey) {
-    // Local provider — no key needed
-  } else {
-    return; // Key required but not provided
+  if (key) {
+    const secretKey = selectedProvider === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : selectedProvider === 'openrouter' ? 'kovix.apiKey.openrouter' : 'kovix.apiKey.anthropic';
+    await api.setSecret(secretKey, key);
+    // Switch to this provider
+    const ok = await api.switchProvider(selectedProvider);
+    if (ok) {
+      activeProvider = selectedProvider;
+      if (providerSelect) providerSelect.value = selectedProvider;
+    }
+    apiKeyModal.classList.add('hidden');
+    addMessage('system', `🔑 API key saved for ${selectedProvider === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}.`);
+    await loadModels();
   }
-  // Switch to this provider
-  const ok = await api.switchProvider(selectedProvider);
-  if (ok) {
-    activeProvider = selectedProvider;
-    if (providerSelect) providerSelect.value = selectedProvider;
-  }
-  apiKeyModal.classList.add('hidden');
-  addMessage('system', `🔑 API key saved for ${meta.label}.`);
-  await loadModels();
 });
 
 btnCancelKey.addEventListener('click', () => {
@@ -1096,26 +1203,24 @@ modelSelect.addEventListener('change', async () => {
 if (providerSelect) {
   providerSelect.addEventListener('change', async () => {
     const providerType = providerSelect.value;
-    const meta = getProviderMeta(providerType);
-
-    if (meta.needsKey) {
-      const hasKey = meta.secretKey ? await api.getSecret(meta.secretKey) : false;
-      if (!hasKey) {
-        // No key for this provider — open settings
-        addMessage('system', `No API key set for ${meta.label}. Set it in Settings.`);
-        settingsModal.classList.remove('hidden');
-        providerSelect.value = activeProvider;
-        return;
-      }
+    const secretKey = providerType === 'nvidia-nim' ? 'kovix.apiKey.nvidia-nim' : providerType === 'openrouter' ? 'kovix.apiKey.openrouter' : 'kovix.apiKey.anthropic';
+    const hasKey = await api.getSecret(secretKey);
+    if (!hasKey) {
+      // No key for this provider — open settings
+      const providerLabel = providerType === 'nvidia-nim' ? 'NVIDIA NIM' : providerType === 'openrouter' ? 'OpenRouter' : 'Anthropic';
+      addMessage('system', `No API key set for ${providerLabel}. Set it in Settings.`);
+      settingsModal.classList.remove('hidden');
+      providerSelect.value = activeProvider;
+      return;
     }
-
     const ok = await api.switchProvider(providerType);
     if (ok) {
       activeProvider = providerType;
-      addMessage('system', `Switched to ${meta.label}.`);
+      const providerLabel2 = providerType === 'nvidia-nim' ? 'NVIDIA NIM' : providerType === 'openrouter' ? 'OpenRouter' : 'Anthropic';
+      addMessage('system', `Switched to ${providerLabel2}.`);
       await loadModels();
     } else {
-      addMessage('system', `Failed to switch to ${meta.label}. Check your API key or server status.`);
+      addMessage('system', `Failed to switch to ${providerType}. Check your API key.`);
       providerSelect.value = activeProvider;
     }
   });
@@ -1126,27 +1231,12 @@ if (providerSelect) {
 // ---------------------------------------------------------------------------
 
 btnSettings.addEventListener('click', async () => {
-  // Load existing keys into settings fields
-  const keys = await Promise.all([
-    api.getSecret('kovix.apiKey.anthropic'),
-    api.getSecret('kovix.apiKey.nvidia-nim'),
-    api.getSecret('kovix.apiKey.openrouter'),
-    api.getSecret('kovix.apiKey.openai'),
-    api.getSecret('kovix.apiKey.deepseek'),
-    api.getSecret('kovix.apiKey.groq'),
-    api.getSecret('kovix.apiKey.mistral'),
-    api.getSecret('kovix.apiKey.gemini'),
-    api.getSecret('kovix.apiKey.together'),
-  ]);
-  settingsAnthropicKey.value = keys[0] || '';
-  if (settingsNvidiaKey) settingsNvidiaKey.value = keys[1] || '';
-  if (settingsOpenRouterKey) settingsOpenRouterKey.value = keys[2] || '';
-  // New provider key fields
-  const newKeyFields = ['settings-openai-key', 'settings-deepseek-key', 'settings-groq-key', 'settings-mistral-key', 'settings-gemini-key', 'settings-together-key'];
-  for (let i = 0; i < newKeyFields.length; i++) {
-    const el = document.getElementById(newKeyFields[i]);
-    if (el) el.value = keys[3 + i] || '';
-  }
+  const anthropicKey = await api.getSecret('kovix.apiKey.anthropic');
+  const nvidiaKey = await api.getSecret('kovix.apiKey.nvidia-nim');
+  const openrouterKey = await api.getSecret('kovix.apiKey.openrouter');
+  settingsAnthropicKey.value = anthropicKey || '';
+  if (settingsNvidiaKey) settingsNvidiaKey.value = nvidiaKey || '';
+  if (settingsOpenRouterKey) settingsOpenRouterKey.value = openrouterKey || '';
   settingsModal.classList.remove('hidden');
 });
 
@@ -1202,58 +1292,17 @@ if (btnSaveOpenRouterKey) {
   });
 }
 
-// Dynamic save handlers for new provider keys
-const newProviderSaveButtons = [
-  { btnId: 'btn-save-openai-key',   inputId: 'settings-openai-key',   secretKey: 'kovix.apiKey.openai',   provider: 'openai',   label: 'OpenAI' },
-  { btnId: 'btn-save-deepseek-key', inputId: 'settings-deepseek-key', secretKey: 'kovix.apiKey.deepseek', provider: 'deepseek', label: 'DeepSeek' },
-  { btnId: 'btn-save-groq-key',     inputId: 'settings-groq-key',    secretKey: 'kovix.apiKey.groq',     provider: 'groq',     label: 'Groq' },
-  { btnId: 'btn-save-mistral-key',  inputId: 'settings-mistral-key', secretKey: 'kovix.apiKey.mistral',  provider: 'mistral',  label: 'Mistral' },
-  { btnId: 'btn-save-gemini-key',   inputId: 'settings-gemini-key',  secretKey: 'kovix.apiKey.gemini',   provider: 'gemini',   label: 'Gemini' },
-  { btnId: 'btn-save-together-key', inputId: 'settings-together-key', secretKey: 'kovix.apiKey.together', provider: 'together', label: 'Together AI' },
-];
-
-for (const { btnId, inputId, secretKey, provider, label } of newProviderSaveButtons) {
-  const btn = document.getElementById(btnId);
-  const input = document.getElementById(inputId);
-  if (btn && input) {
-    btn.addEventListener('click', async () => {
-      const key = input.value.trim();
-      if (key) {
-        await api.setSecret(secretKey, key);
-        addMessage('system', `${label} API key saved. Switching provider…`);
-        settingsModal.classList.add('hidden');
-        const ok = await api.switchProvider(provider);
-        if (ok) {
-          activeProvider = provider;
-          if (providerSelect) providerSelect.value = provider;
-          addMessage('system', `Switched to ${label}.`);
-        }
-        await loadModels();
-      }
-    });
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Init: check for API key on startup
 // ---------------------------------------------------------------------------
 
 (async function init() {
   // Check for any API key
-  const allKeys = await Promise.all([
-    api.getSecret('kovix.apiKey.anthropic'),
-    api.getSecret('kovix.apiKey.nvidia-nim'),
-    api.getSecret('kovix.apiKey.openrouter'),
-    api.getSecret('kovix.apiKey.openai'),
-    api.getSecret('kovix.apiKey.deepseek'),
-    api.getSecret('kovix.apiKey.groq'),
-    api.getSecret('kovix.apiKey.mistral'),
-    api.getSecret('kovix.apiKey.gemini'),
-    api.getSecret('kovix.apiKey.together'),
-  ]);
-  const hasAnyKey = allKeys.some(k => k);
+  const anthropicKey = await api.getSecret('kovix.apiKey.anthropic');
+  const nvidiaKey = await api.getSecret('kovix.apiKey.nvidia-nim');
+  const openrouterKey = await api.getSecret('kovix.apiKey.openrouter');
 
-  if (!hasAnyKey) {
+  if (!anthropicKey && !nvidiaKey && !openrouterKey) {
     apiKeyModal.classList.remove('hidden');
   }
 
