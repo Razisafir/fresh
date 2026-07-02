@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; font-src 'self'; worker-src 'self' blob:; img-src 'self' data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; font-src 'self' data:; worker-src 'self' blob:; img-src 'self' data:;">
   <!-- DOMPurify for XSS prevention -->
   <script src="vendor/dompurify.min.js"></script>
   <title>Kovix</title>
@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="chat/chat.css">
   <link rel="stylesheet" href="filetree/filetree.css">
   <link rel="stylesheet" href="editor/editor.css">
+  <link rel="stylesheet" href="activity/activity.css">
   <link rel="stylesheet" href="light-theme.css">
   <style>
     /* ==========================================================================
@@ -381,6 +382,16 @@
       background: #0d1117;
     }
 
+    /* Agent activity container (bottom of editor pane) */
+    #agent-activity-container {
+      height: 200px;
+      min-height: 36px;
+      max-height: 400px;
+      flex-shrink: 0;
+      overflow: hidden;
+      transition: height 0.2s ease;
+    }
+
     /* Tab bar */
     #tab-bar {
       display: flex;
@@ -666,6 +677,8 @@
           <span class="editor-file-path" id="editor-file-path"></span>
         </div>
         <div class="editor-container" id="editor-container"></div>
+        <!-- Agent Activity Panel (bottom of editor pane) -->
+        <div id="agent-activity-container"></div>
       </div>
 
       <div class="resize-handle" id="resize-editor-chat"></div>
@@ -888,6 +901,7 @@
   <!-- Component scripts -->
   <script src="filetree/filetree.js"></script>
   <script src="editor/editor.js"></script>
+  <script src="activity/activity.js"></script>
   <script src="chat/chat.js"></script>
 
   <!-- Layout coordination script -->
@@ -1109,6 +1123,53 @@
         console.log('[Layout] Monaco editor initialized');
       }).catch(err => {
         console.error('[Layout] Monaco init failed:', err);
+      });
+
+      // Initialize Agent Activity Panel
+      const activityContainer = document.getElementById('agent-activity-container');
+      let activityPanel = null;
+      if (activityContainer && window.AgentActivityPanel) {
+        activityPanel = new AgentActivityPanel(activityContainer, _api, {
+          onFileClick: (filePath) => {
+            // Open the file in the editor when user clicks it in activity panel
+            if (kovixEditor) {
+              kovixEditor.openFile(filePath);
+              openTab(filePath);
+            }
+          },
+          onToggle: (visible) => {
+            // Resize Monaco when activity panel toggles
+            if (kovixEditor) {
+              setTimeout(() => {
+                if (kovixEditor.editor) kovixEditor.editor.layout();
+                if (kovixEditor.diffEditor) kovixEditor.diffEditor.layout();
+              }, 250);
+            }
+          },
+        });
+        window.activityPanel = activityPanel;
+        console.log('[Layout] Agent Activity Panel initialized');
+      }
+
+      // Forward agent events to activity panel
+      _api.onAgentEvent((event) => {
+        if (activityPanel) {
+          activityPanel.handleEvent(event);
+        }
+      });
+
+      // Forward pipeline events to activity panel
+      _api.onPipelineEvent((event) => {
+        if (activityPanel) {
+          activityPanel.handleEvent(event);
+        }
+      });
+
+      // Forward swarm events to activity panel
+      _api.onSwarmEvent((event) => {
+        if (activityPanel) {
+          activityPanel.handleEvent(event);
+        }
       });
 
       // Refresh tree button

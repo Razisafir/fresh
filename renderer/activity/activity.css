@@ -1,0 +1,368 @@
+/* ==========================================================================
+   Agent Activity Panel — Kovix Layout B
+   ========================================================================== */
+
+.agent-activity-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0d1117;
+  border-top: 1px solid #21262d;
+  overflow: hidden;
+  transition: height 0.2s ease;
+}
+
+.agent-activity-panel.collapsed {
+  height: 36px !important;
+}
+
+/* ---- Header ---- */
+
+.activity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 10px;
+  background: #010409;
+  border-bottom: 1px solid #21262d;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.activity-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+.activity-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.activity-filter-btn,
+.activity-pause-btn,
+.activity-clear-btn,
+.activity-toggle-btn {
+  font-size: 10px;
+  padding: 2px 8px;
+  background: none;
+  border: 1px solid #30363d;
+  color: #484f58;
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.activity-filter-btn:hover,
+.activity-pause-btn:hover,
+.activity-clear-btn:hover,
+.activity-toggle-btn:hover {
+  border-color: #484f58;
+  color: #8b949e;
+}
+
+.activity-filter-btn.active {
+  border-color: #7c83ff;
+  color: #7c83ff;
+  background: rgba(124, 131, 255, 0.1);
+}
+
+.activity-pause-btn.paused {
+  border-color: #d29922;
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.1);
+}
+
+/* ---- Activity List ---- */
+
+.activity-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  scrollbar-width: thin;
+  scrollbar-color: #30363d transparent;
+}
+
+.activity-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.activity-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.activity-list::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+}
+
+.activity-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 60px;
+  color: #484f58;
+  font-style: italic;
+  font-size: 11px;
+}
+
+/* ---- Activity Entry ---- */
+
+.activity-entry {
+  border-bottom: 1px solid #161b22;
+  padding: 0;
+  transition: background 0.1s ease;
+}
+
+.activity-entry:hover {
+  background: #161b22;
+}
+
+.activity-entry[data-status="running"] .activity-entry-header {
+  background: rgba(210, 153, 34, 0.05);
+}
+
+.activity-entry[data-status="error"] .activity-entry-header {
+  background: rgba(248, 81, 73, 0.05);
+}
+
+.activity-entry[data-status="success"] .activity-entry-header {
+  background: rgba(63, 185, 80, 0.03);
+}
+
+/* ---- Entry Header ---- */
+
+.activity-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  cursor: default;
+  min-height: 28px;
+}
+
+.activity-entry.collapsible .activity-entry-header {
+  cursor: pointer;
+}
+
+.activity-chevron {
+  font-size: 8px;
+  color: #484f58;
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.activity-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+.activity-label {
+  font-size: 12px;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.activity-badge.success {
+  color: #3fb950;
+  background: rgba(63, 185, 80, 0.15);
+}
+
+.activity-badge.error {
+  color: #f85149;
+  background: rgba(248, 81, 73, 0.15);
+}
+
+.activity-badge.running {
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Spinner animation */
+.spinner {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid rgba(210, 153, 34, 0.3);
+  border-top-color: #d29922;
+  border-radius: 50%;
+  animation: activity-spin 0.8s linear infinite;
+}
+
+@keyframes activity-spin {
+  to { transform: rotate(360deg); }
+}
+
+.activity-timestamp {
+  font-size: 9px;
+  color: #30363d;
+  flex-shrink: 0;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+}
+
+/* ---- Entry Body ---- */
+
+.activity-entry-body {
+  padding: 4px 10px 6px 46px;
+}
+
+.activity-file-path {
+  font-size: 11px;
+  color: #58a6ff;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-bottom: 4px;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  transition: background 0.1s ease;
+  word-break: break-all;
+}
+
+.activity-file-path:hover {
+  background: rgba(88, 166, 255, 0.1);
+  text-decoration: underline;
+}
+
+.activity-content {
+  font-size: 11px;
+  color: #8b949e;
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 0;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  line-height: 1.5;
+}
+
+.activity-content.activity-result {
+  border-color: #21262d;
+}
+
+/* ---- Status Bar ---- */
+
+.activity-status-bar {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: #010409;
+  border-top: 1px solid #21262d;
+  font-size: 10px;
+  color: #484f58;
+  flex-shrink: 0;
+}
+
+.status-idle {
+  color: #3fb950;
+}
+
+.status-active {
+  color: #d29922;
+}
+
+/* ---- Collapsed state ---- */
+
+.agent-activity-panel.collapsed .activity-list,
+.agent-activity-panel.collapsed .activity-status-bar {
+  display: none;
+}
+
+.agent-activity-panel.collapsed .activity-header {
+  border-bottom: none;
+}
+
+/* ---- Light theme ---- */
+
+[data-theme="light"] .agent-activity-panel {
+  background: #ffffff;
+  border-color: #d0d7de;
+}
+
+[data-theme="light"] .activity-header {
+  background: #f6f8fa;
+  border-color: #d0d7de;
+}
+
+[data-theme="light"] .activity-title {
+  color: #656d76;
+}
+
+[data-theme="light"] .activity-filter-btn,
+[data-theme="light"] .activity-pause-btn,
+[data-theme="light"] .activity-clear-btn,
+[data-theme="light"] .activity-toggle-btn {
+  border-color: #d0d7de;
+  color: #656d76;
+}
+
+[data-theme="light"] .activity-list {
+  scrollbar-color: #d0d7de transparent;
+}
+
+[data-theme="light"] .activity-entry {
+  border-color: #f6f8fa;
+}
+
+[data-theme="light"] .activity-entry:hover {
+  background: #f6f8fa;
+}
+
+[data-theme="light"] .activity-content {
+  background: #f6f8fa;
+  border-color: #d0d7de;
+  color: #656d76;
+}
+
+[data-theme="light"] .activity-timestamp {
+  color: #b0b8c1;
+}
+
+[data-theme="light"] .activity-status-bar {
+  background: #f6f8fa;
+  border-color: #d0d7de;
+  color: #656d76;
+}
+
+[data-theme="light"] .activity-file-path {
+  color: #0969da;
+}
+
+[data-theme="light"] .activity-file-path:hover {
+  background: rgba(9, 105, 218, 0.1);
+}

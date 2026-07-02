@@ -73,7 +73,29 @@ function addMessage(role, content, extra) {
     if (extra.streaming) div.classList.add('streaming');
   }
 
-  div.innerHTML = renderMarkdown(content);
+  // Support collapsible sections (thought process, task completion, etc.)
+  if (extra && extra.collapsible) {
+    div.classList.add('collapsible-message');
+    if (extra.defaultCollapsed) div.classList.add('collapsed');
+
+    const header = document.createElement('div');
+    header.className = 'collapsible-header';
+    header.innerHTML = `<span class="collapsible-chevron">${extra.defaultCollapsed ? '\u25B6' : '\u25BC'}</span> <span class="collapsible-title">${escapeHtml(extra.collapsibleTitle || content.slice(0, 80))}</span>`;
+    header.addEventListener('click', () => {
+      div.classList.toggle('collapsed');
+      const chevron = header.querySelector('.collapsible-chevron');
+      if (chevron) chevron.textContent = div.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+    });
+    div.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'collapsible-body';
+    body.innerHTML = renderMarkdown(content);
+    div.appendChild(body);
+  } else {
+    div.innerHTML = renderMarkdown(content);
+  }
+
   messageList.appendChild(div);
   messageList.scrollTop = messageList.scrollHeight;
   return div;
@@ -575,12 +597,20 @@ api.onAgentEvent(async (event) => {
     case 'verification_result': {
       const badge = event.passed ? 'PASS' : 'FAIL';
       const unverified = event.unverified ? ' (unverified)' : '';
-      addMessage('system', `🔍 Verification: ${badge}${unverified}`);
+      addMessage('system', `\u{1F50D} Verification: ${badge}${unverified}`, {
+        collapsible: true,
+        collapsibleTitle: `\u{1F50D} Verification: ${badge}${unverified}`,
+        defaultCollapsed: true,
+      });
       break;
     }
     case 'complete':
       streamingMessage = null;
-      addMessage('system', `✅ Task complete: ${event.summary}`);
+      addMessage('system', event.summary || 'Task complete', {
+        collapsible: true,
+        collapsibleTitle: '\u2705 Task complete: ' + (event.summary ? event.summary.slice(0, 60) : ''),
+        defaultCollapsed: true,
+      });
       setState('idle');
       break;
     case 'error':
