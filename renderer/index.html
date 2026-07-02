@@ -692,6 +692,26 @@
           <div id="welcome-message" class="welcome">
             <p>Welcome to Kovix. Chat with AI, use Plan mode for structured automation, Refine mode to turn ideas into specs, or Swarm mode for parallel multi-agent tasks.</p>
           </div>
+          <!-- First-run onboarding card (shown when no API key is configured) -->
+          <div id="first-run-card" class="first-run-card hidden">
+            <div class="first-run-header">
+              <span class="first-run-icon">&#9889;</span>
+              <span class="first-run-title">Get Started with Kovix</span>
+            </div>
+            <div class="first-run-body">
+              <p>To start using AI features, configure an API key for one of the supported providers:</p>
+              <ul class="first-run-providers">
+                <li><strong>Anthropic</strong> &mdash; Claude models &mdash; <a href="https://console.anthropic.com/" target="_blank">Get key</a></li>
+                <li><strong>OpenAI</strong> &mdash; GPT models &mdash; <a href="https://platform.openai.com/api-keys" target="_blank">Get key</a></li>
+                <li><strong>NVIDIA NIM</strong> &mdash; Free-tier models &mdash; <a href="https://build.nvidia.com/" target="_blank">Get key</a></li>
+                <li><strong>OpenRouter</strong> &mdash; Multi-provider gateway &mdash; <a href="https://openrouter.ai/keys" target="_blank">Get key</a></li>
+                <li><strong>Google Gemini</strong> &mdash; Gemini models &mdash; <a href="https://aistudio.google.com/apikey" target="_blank">Get key</a></li>
+                <li><strong>Ollama</strong> &mdash; Local models (free, no key needed) &mdash; <a href="https://ollama.ai/" target="_blank">Install</a></li>
+              </ul>
+              <p class="first-run-hint">Kovix uses a Plan&rarr;Approve&rarr;Execute&rarr;Verify loop: describe what you want, review the plan, approve execution, and verify the results.</p>
+              <button class="btn-primary" id="btn-first-run-configure">Configure API Key</button>
+            </div>
+          </div>
           <!-- Spec card (hidden, shown during refinement) -->
           <div id="spec-card" class="spec-card hidden">
             <div class="spec-card-header">

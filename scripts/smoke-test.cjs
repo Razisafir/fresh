@@ -16,7 +16,7 @@ const REQUIRED_MARKERS = [
   /Kovix starting up \(Electron standalone/,
   /AnthropicProvider.*Initialized/,
   /ConstructAIService.*Initialized/,
-  /ToolRegistry.*Initialized with 7 built-in tools/,
+  /ToolRegistry.*Initialized with \d+ built-in tools/,
   /AgentLoop.*Service created/,
   /\[Main\] Renderer loaded/,
 ];

@@ -23,7 +23,7 @@ import * as path from 'path';
 import { initAppState, getAppState, isAppStateInitialized } from '../src/platform/appState';
 import { ConstructAIService } from '../src/llm/aiService';
 import { pendingChangesService } from '../src/diff/pendingChangesService';
-import { initToolRegistry } from '../src/tools/toolRegistryService';
+import { initToolRegistry, getToolRegistry } from '../src/tools/toolRegistryService';
 import { initAgentLoop, getAgentLoop } from '../src/agent/agentLoop';
 import { McpManager } from '../src/mcp/mcpManager';
 import { resolveCommandConfirmation } from '../src/platform/prompts';
@@ -506,7 +506,7 @@ function registerIpcHandlers(): void {
                         const orchestrator = getSwarmOrchestrator(aiService);
                         const stream = orchestrator.execute(plan, {
                                 aiService,
-                                toolRegistry: initToolRegistry(),
+                                toolRegistry: getToolRegistry()!,
                                 pendingChanges: pendingChangesService,
                                 workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
                         });
@@ -710,7 +710,7 @@ function registerIpcHandlers(): void {
                                 aiService,
                                 agentDeps: {
                                         aiService,
-                                        toolRegistry: initToolRegistry(),
+                                        toolRegistry: getToolRegistry()!,
                                         pendingChanges: pendingChangesService,
                                         workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
                                 },
@@ -736,7 +736,7 @@ function registerIpcHandlers(): void {
                                 aiService: aiService!,
                                 agentDeps: {
                                         aiService: aiService!,
-                                        toolRegistry: initToolRegistry(),
+                                        toolRegistry: getToolRegistry()!,
                                         pendingChanges: pendingChangesService,
                                         workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
                                 },
@@ -756,7 +756,7 @@ function registerIpcHandlers(): void {
                                 aiService: aiService!,
                                 agentDeps: {
                                         aiService: aiService!,
-                                        toolRegistry: initToolRegistry(),
+                                        toolRegistry: getToolRegistry()!,
                                         pendingChanges: pendingChangesService,
                                         workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
                                 },
@@ -779,7 +779,7 @@ function registerIpcHandlers(): void {
                                 aiService: aiService!,
                                 agentDeps: {
                                         aiService: aiService!,
-                                        toolRegistry: initToolRegistry(),
+                                        toolRegistry: getToolRegistry()!,
                                         pendingChanges: pendingChangesService,
                                         workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
                                 },
@@ -799,7 +799,7 @@ function registerIpcHandlers(): void {
                                 aiService: aiService!,
                                 agentDeps: {
                                         aiService: aiService!,
-                                        toolRegistry: initToolRegistry(),
+                                        toolRegistry: getToolRegistry()!,
                                         pendingChanges: pendingChangesService,
                                         workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
                                 },
@@ -820,7 +820,7 @@ function registerIpcHandlers(): void {
                                 aiService,
                                 agentDeps: {
                                         aiService,
-                                        toolRegistry: initToolRegistry(),
+                                        toolRegistry: getToolRegistry()!,
                                         pendingChanges: pendingChangesService,
                                         workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
                                 },
@@ -844,7 +844,7 @@ function registerIpcHandlers(): void {
                                 aiService: aiService!,
                                 agentDeps: {
                                         aiService: aiService!,
-                                        toolRegistry: initToolRegistry(),
+                                        toolRegistry: getToolRegistry()!,
                                         pendingChanges: pendingChangesService,
                                         workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
                                 },
@@ -864,7 +864,7 @@ function registerIpcHandlers(): void {
                                 aiService: aiService!,
                                 agentDeps: {
                                         aiService: aiService!,
-                                        toolRegistry: initToolRegistry(),
+                                        toolRegistry: getToolRegistry()!,
                                         pendingChanges: pendingChangesService,
                                         workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
                                 },
@@ -883,7 +883,7 @@ function registerIpcHandlers(): void {
                                 aiService,
                                 agentDeps: {
                                         aiService,
-                                        toolRegistry: initToolRegistry(),
+                                        toolRegistry: getToolRegistry()!,
                                         pendingChanges: pendingChangesService,
                                         workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
                                 },

@@ -1196,6 +1196,9 @@ btnSaveKey.addEventListener('click', async () => {
       if (providerSelect) providerSelect.value = selectedProvider;
     }
     apiKeyModal.classList.add('hidden');
+    // Hide first-run card after key is saved
+    const firstRunCard = document.getElementById('first-run-card');
+    if (firstRunCard) firstRunCard.classList.add('hidden');
     addMessage('system', `🔑 API key saved for ${selectedProvider === 'nvidia-nim' ? 'NVIDIA NIM' : 'Anthropic'}.`);
     await loadModels();
   }
@@ -1214,8 +1217,26 @@ async function loadModels() {
     const models = await api.listModels();
     if (!models || models.length === 0) {
       modelSelect.innerHTML = '<option value="">No models available</option>';
+      // Show "Configure API Key" link when no models are available
+      const existingLink = document.getElementById('configure-api-key-link');
+      if (!existingLink) {
+        const link = document.createElement('a');
+        link.id = 'configure-api-key-link';
+        link.href = '#';
+        link.textContent = 'Configure API Key';
+        link.style.cssText = 'font-size:11px;color:#58a6ff;margin-left:8px;cursor:pointer;text-decoration:underline;';
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const modal = document.getElementById('api-key-modal');
+          if (modal) modal.classList.remove('hidden');
+        });
+        modelSelect.parentNode.insertBefore(link, modelSelect.nextSibling);
+      }
       return;
     }
+    // Hide the configure link if models are loaded
+    const existingLink = document.getElementById('configure-api-key-link');
+    if (existingLink) existingLink.remove();
     const config = await api.getConfig();
     const currentModel = config.llmActiveModel || '';
     modelSelect.innerHTML = '';
@@ -1376,4 +1397,20 @@ if (btnSaveOpenRouterKey) {
       welcomeMsg.querySelector('p').textContent = `Workspace: ${appState.workspaceRoots.join(', ')}. Ask anything to get started.`;
     }
   }
+
+  // First-run onboarding: show card if no API key is configured
+  try {
+    const models = await api.listModels();
+    if (!models || models.length === 0) {
+      const firstRunCard = document.getElementById('first-run-card');
+      if (firstRunCard) firstRunCard.classList.remove('hidden');
+      const btnFirstRun = document.getElementById('btn-first-run-configure');
+      if (btnFirstRun) {
+        btnFirstRun.addEventListener('click', () => {
+          const modal = document.getElementById('api-key-modal');
+          if (modal) modal.classList.remove('hidden');
+        });
+      }
+    }
+  } catch { /* first-run check failed, non-critical */ }
 })();

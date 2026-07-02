@@ -29,6 +29,12 @@
 - [ ] `npm test` — all tests passing (check the count against the prior
       release — should only increase, never decrease)
 - [ ] `npm audit` — 0 vulnerabilities
+- [ ] `npm run smoke` — exits 0. **If any tools were added, removed, or
+      renamed since the last release**, update `REQUIRED_MARKERS` and
+      `FORBIDDEN_MARKERS` in `scripts/smoke-test.cjs`. Quick check:
+      ```bash
+      grep -E "REQUIRED_MARKERS|FORBIDDEN_MARKERS" scripts/smoke-test.cjs
+      ```
 
 - [ ] CI is green on `main` (both Node 20.x and 22.x matrix)
 - [ ] No skipped/placeholder tests (grep for `it.skip`, `describe.skip`,
@@ -38,15 +44,12 @@
 
 ## Packaging
 
-- [ ] `npm run package` produces a `.vsix` with 0 warnings
-- [ ] `.vsix` size is sane (50 KB to a few MB)
-- [ ] `npx vsce ls` output reviewed — no dev files leaking (no `src/`,
-      `test/`, `scripts/`, `docs/`, `.tsbuildinfo`)
+- [ ] `npm run dist` produces installers (Windows NSIS, macOS DMG, Linux AppImage)
+- [ ] Installer size is sane (50-150 MB for Electron app)
 - [ ] `README.md` reflects the actual shipping features (no aspirational
       claims, no missing features)
 - [ ] `LICENSE.txt` is present and matches `package.json` `license` field
-- [ ] `media/kovix-icon.png` is the current logo (128×128 PNG)
-- [ ] `package.json` `version`, `publisher`, `repository`, `icon` fields
+- [ ] `package.json` `version`, `publisher`, `repository` fields
       are all correct
 
 ---
@@ -54,14 +57,15 @@
 ## Manual smoke tests (USER — cannot be automated)
 
 ### v0.1-alpha basic task (always re-run)
-- [ ] Install the `.vsix` on a clean VS Code (no prior Kovix)
-- [ ] Open a folder, click Kovix icon, panel opens
-- [ ] Run "Manage API Keys", paste Anthropic key
+- [ ] Launch Kovix (`npm run dev` after `npm run compile`)
+- [ ] Open a folder via File > Open Folder
+- [ ] Configure an API key via File > Manage API Keys
 - [ ] Type: "create a file called hello.txt with the text hi"
 - [ ] Plan appears, user approves
 - [ ] `hello.txt` appears in workspace with "hi" inside
-- [ ] No error popups, red banners, or "Extension Host terminated" messages
-- [ ] **Critical:** the plan-approval gate fired BEFORE the file was written
+- [ ] File tree shows the new file
+- [ ] Agent Activity Panel shows tool calls and file writes
+- [ ] No error popups, red banners, or crashes
 
 ### Memory recall (M5, v1.0-beta+)
 - [ ] See `docs/08A_MEMORY_SMOKE_TEST.md` — all 3 tests pass
@@ -90,12 +94,13 @@
 
 ## Cross-platform install (USER — at least one platform)
 
-- [ ] Install the `.vsix` on Windows (or macOS, or Linux — whichever the
+- [ ] Install on Windows (or macOS, or Linux — whichever the
       lead uses day-to-day)
-- [ ] Extension activates on first use (no manual activation needed)
-- [ ] All 7 built-in tools work (read_file, write_file, edit_file,
-      list_directory, run_command, search_code, web_fetch)
-- [ ] Agent panel renders correctly (no layout bugs, no missing CSS)
+- [ ] App launches correctly, no crashes on startup
+- [ ] All 8 built-in tools work (read_file, write_file, edit_file,
+      create_directory, list_directory, run_command, search_code, web_fetch)
+- [ ] Three-pane IDE renders correctly (file tree, editor, chat)
+- [ ] Monaco editor opens files with syntax highlighting
 
 ---
 
@@ -134,13 +139,9 @@
 
 ## Publishing (ONLY after all above are checked)
 
-- [ ] `vsce publish <version>` (or marketplace web upload)
-      — this is the point of no return. See `docs/07_MARKETPLACE_LISTING.md`
-      for the listing copy.
-- [ ] Verify the listing is live at
-      `https://marketplace.visualstudio.com/items?itemName=kovix.kovix`
+- [ ] `npm run dist` produces platform installers
 - [ ] Tag the release in git: `git tag v<version> && git push --tags`
-- [ ] Create a GitHub Release with the `.vsix` attached
+- [ ] Create a GitHub Release with the installers attached
 - [ ] Update `CHANGELOG.md` with the release date
 
 ---

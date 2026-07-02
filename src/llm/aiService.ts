@@ -319,7 +319,13 @@ export class ConstructAIService implements IConstructAIService, Disposable {
         }
 
         async switchProvider(providerType: AIProviderType): Promise<boolean> {
-                const provider = this._providers.get(providerType);
+                // Resolve common aliases (e.g., 'nvidia' → 'nvidia-nim')
+                const aliases: Record<string, AIProviderType> = {
+                        'nvidia': 'nvidia-nim' as AIProviderType,
+                        'openai-compatible': 'lm-studio' as AIProviderType,
+                };
+                const resolvedType = (aliases[providerType] || providerType) as AIProviderType;
+                const provider = this._providers.get(resolvedType);
                 if (!provider) {
                         logger.warn(`[ConstructAIService] Provider not registered: ${providerType}. Available: ${Array.from(this._providers.keys()).join(', ')}`);
                         return false;
