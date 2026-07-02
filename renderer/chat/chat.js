@@ -383,7 +383,7 @@ function addSwarmCompletedCard(summary, workerResults) {
   div.className = 'swarm-completed-card';
 
   const succeeded = workerResults.filter(r => r.success).length;
-  const failed = workerResults.filter(r => !r.success).length;
+  const _failed = workerResults.filter(r => !r.success).length;
 
   const resultsHtml = workerResults.map(r => {
     const statusClass = r.success ? 'success' : 'error';
@@ -404,7 +404,7 @@ function addSwarmCompletedCard(summary, workerResults) {
   div.innerHTML = `
     <div class="swarm-partition-header">
       <span class="swarm-icon">&#9881;</span>
-      <h3>Swarm Complete: ${succeeded}/${workerResults.length} succeeded${failed > 0 ? `, ${failed} failed` : ''}</h3>
+      <h3>Swarm Complete: ${succeeded}/${workerResults.length} succeeded${_failed > 0 ? `, ${_failed} failed` : ''}</h3>
     </div>
     <div class="swarm-results-list">${resultsHtml}</div>
   `;
@@ -484,6 +484,7 @@ function updatePlaceholder() {
   if (inputBox) {
     if (currentMode === 'chat') inputBox.placeholder = 'Ask anything...';
     else if (currentMode === 'plan') inputBox.placeholder = 'Describe a task...';
+    else if (currentMode === 'refine') inputBox.placeholder = 'Describe your idea... (Refine mode builds a spec)';
     else if (currentMode === 'swarm') inputBox.placeholder = 'Describe a multi-part task for parallel agents...';
   }
 }
@@ -710,6 +711,17 @@ async function sendTask() {
       addMessage('system', `❌ ${result.error}`);
       setState('idle');
     }
+  } else if (currentMode === 'refine') {
+    // Refine mode: send to refinement pipeline
+    setState('executing');
+    _refinementActive = true;
+    addMessage('system', '🔍 Refining your idea into a structured spec...');
+    const result = await api.sendTask(text);
+    if (result.error) {
+      addMessage('system', `❌ ${result.error}`);
+      setState('idle');
+    }
+    // The spec card will be updated when the refinement events come back
   } else if (currentMode === 'swarm') {
     // Swarm mode: plan first, then auto-offer swarm partition
     setState('planning');
@@ -805,6 +817,168 @@ document.getElementById('btn-mode-swarm').addEventListener('click', () => {
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('btn-mode-swarm').classList.add('active');
   updatePlaceholder();
+});
+
+// ---- Refine mode ----
+document.getElementById('btn-mode-refine').addEventListener('click', () => {
+  currentMode = 'refine';
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-mode-refine').classList.add('active');
+  updatePlaceholder();
+  // Show spec card if we have one
+  if (_currentSpec) updateSpecCard(_currentSpec);
+});
+
+// ---- Spec card state ----
+let _currentSpec = null;       // IStructuredSpec from backend
+let _refinementActive = false; // Are we in a refinement conversation?
+
+// ---- Spec card UI ----
+function updateSpecCard(spec) {
+  _currentSpec = spec;
+  const card = document.getElementById('spec-card');
+  if (!spec) { card.classList.add('hidden'); return; }
+
+  card.classList.remove('hidden');
+  document.getElementById('spec-card-title').textContent = spec.name;
+  document.getElementById('spec-card-version').textContent = `v${spec.version}`;
+  document.getElementById('spec-card-summary').textContent = spec.summary;
+  document.getElementById('spec-card-assumptions').textContent = spec.assumptions.join('; ') || '—';
+  document.getElementById('spec-card-complexity').textContent = spec.complexity;
+  document.getElementById('spec-card-credits').textContent = `~${spec.estimatedCredits}`;
+
+  // Requirements list
+  const ul = document.getElementById('spec-card-requirements');
+  ul.innerHTML = '';
+  for (const req of spec.requirements) {
+    const li = document.createElement('li');
+    const prioritySpan = document.createElement('span');
+    prioritySpan.className = `spec-req-priority ${req.priority}`;
+    prioritySpan.textContent = req.priority.toUpperCase();
+    li.appendChild(prioritySpan);
+    li.appendChild(document.createTextNode(`${req.label}: ${req.description}`));
+    if (req.satisfied) {
+      const check = document.createElement('span');
+      check.className = 'spec-req-satisfied';
+      check.textContent = ' ✓';
+      li.appendChild(check);
+    } else if (_pipelineComplete) {
+      const cross = document.createElement('span');
+      cross.className = 'spec-req-unsatisfied';
+      cross.textContent = ' ✗';
+      li.appendChild(cross);
+    }
+    ul.appendChild(li);
+  }
+}
+
+// ---- Pipeline progress UI ----
+let _pipelineComplete = false;
+
+function showPipelineProgress(completed, total, current) {
+  const el = document.getElementById('pipeline-progress');
+  el.classList.remove('hidden');
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  document.getElementById('pipeline-progress-fill').style.width = `${pct}%`;
+  document.getElementById('pipeline-progress-label').textContent = `Executing... ${completed}/${total} milestones`;
+  document.getElementById('pipeline-progress-detail').textContent = current || '';
+}
+
+function _hidePipelineProgress() {
+  document.getElementById('pipeline-progress').classList.add('hidden');
+}
+
+function _showCompletionCard(spec, allMet) {
+  const msgList = document.getElementById('message-list');
+  const card = document.createElement('div');
+  card.className = 'completion-card';
+
+  const header = document.createElement('div');
+  header.className = 'completion-card-header';
+  header.innerHTML = `<h3>${allMet ? '✅ All Requirements Met' : '⚠️ Partial Completion'}</h3>`;
+  card.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'completion-card-body';
+  if (spec) {
+    const met = spec.requirements.filter(r => r.satisfied).length;
+    const total = spec.requirements.length;
+    body.innerHTML = `<p>${met}/${total} requirements satisfied.</p>`;
+    for (const req of spec.requirements) {
+      const div = document.createElement('div');
+      div.className = 'completion-req-status';
+      div.textContent = `${req.satisfied ? '✓' : '✗'} [${req.priority.toUpperCase()}] ${req.label}`;
+      div.style.color = req.satisfied ? '#3fb950' : '#f85149';
+      body.appendChild(div);
+    }
+  }
+  card.appendChild(body);
+
+  const actions = document.createElement('div');
+  actions.className = 'completion-card-actions';
+  if (!allMet) {
+    const v2Btn = document.createElement('button');
+    v2Btn.className = 'btn-small btn-primary';
+    v2Btn.textContent = 'Run it again (v2)';
+    v2Btn.addEventListener('click', () => {
+      currentMode = 'refine';
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('btn-mode-refine').classList.add('active');
+      updatePlaceholder();
+      inputBox.value = 'I want to refine the spec based on execution results';
+      inputBox.focus();
+    });
+    actions.appendChild(v2Btn);
+  }
+  card.appendChild(actions);
+
+  msgList.appendChild(card);
+  msgList.scrollTop = msgList.scrollHeight;
+}
+
+// ---- Approve/Reject spec buttons ----
+document.getElementById('btn-approve-spec').addEventListener('click', () => {
+  if (!_currentSpec) return;
+  // Transition to planning state after spec approval
+  addMessage('system', `✅ Spec approved: **${_currentSpec.name}** v${_currentSpec.version}. Generating plan...`);
+  document.getElementById('spec-card').classList.add('hidden');
+  state = 'planning';
+  // The actual plan generation will be handled by the backend pipeline
+  // For now, show the preflight card as a demo
+  document.getElementById('preflight-card').classList.remove('hidden');
+  _refinementActive = false;
+});
+
+document.getElementById('btn-reject-spec').addEventListener('click', () => {
+  if (!_currentSpec) return;
+  addMessage('system', '🔄 Spec revision requested. Continue refining...');
+  _refinementActive = true;
+});
+
+// ---- Pre-flight card ----
+document.getElementById('preflight-allow-swarm').addEventListener('change', (e) => {
+  document.getElementById('preflight-workers-row').style.display = e.target.checked ? 'flex' : 'none';
+});
+
+document.getElementById('btn-execute-preflight').addEventListener('click', () => {
+  const config = {
+    executionMode: document.getElementById('preflight-exec-mode').value,
+    creditLimit: parseInt(document.getElementById('preflight-credit-limit').value) || 200,
+    verifyAfterMilestone: document.getElementById('preflight-verify').checked,
+    allowSwarm: document.getElementById('preflight-allow-swarm').checked,
+    maxWorkers: parseInt(document.getElementById('preflight-max-workers').value) || 4,
+    selectedMilestoneIds: [],
+  };
+  document.getElementById('preflight-card').classList.add('hidden');
+  addMessage('system', `🚀 Executing with config: mode=${config.executionMode}, credits≤${config.creditLimit}${config.allowSwarm ? `, swarm=${config.maxWorkers} workers` : ''}`);
+  state = 'executing';
+  showPipelineProgress(0, 1, 'Starting execution...');
+});
+
+document.getElementById('btn-cancel-preflight').addEventListener('click', () => {
+  document.getElementById('preflight-card').classList.add('hidden');
+  state = 'idle';
+  addMessage('system', 'Execution cancelled.');
 });
 
 // Auto-grow textarea

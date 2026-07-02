@@ -83,8 +83,10 @@ export interface IAppConfig {
         debugVerbose: boolean;
         /** Active agent role (default: 'general'). */
         agentRole: string;
-        /** UI layout mode (default: 'ide'). */
-        uiMode: 'chat' | 'ide';
+        /** UI layout mode: ide (3-pane) or chat (centered) (default: 'ide'). */
+        uiMode: 'ide' | 'chat';
+        /** Active agent mode: chat, plan, or refine (default: 'chat'). */
+        agentMode: 'chat' | 'plan' | 'refine';
         /** Cognee knowledge-graph integration (default: disabled). */
         cogneeEnabled: boolean;
         /** Path to Python executable for Cognee (default: 'python3'). */
