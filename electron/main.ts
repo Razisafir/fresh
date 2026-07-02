@@ -35,6 +35,8 @@ import { initCodebaseIndexer, getCodebaseIndexer } from '../src/memory/codebaseI
 import { getFileWatcherService } from '../src/platform/fileWatcher';
 import { logger } from '../src/util/logger';
 import type { IApprovedPlan, AgentLoopEvent } from '../src/types/agent';
+import { getPipelineOrchestrator, resetPipelineOrchestrator } from '../src/agent/pipelineOrchestrator';
+import type { IPreFlightConfig, PipelineEvent } from '../src/types/spec';
 
 // ---------------------------------------------------------------------------
 // Globals
@@ -680,6 +682,206 @@ function registerIpcHandlers(): void {
 
         ipcMain.handle('watcher:stop', async () => {
                 getFileWatcherService().stopWatching();
+        });
+
+        // ---- Pipeline (Idea-to-Execution) ----
+        ipcMain.handle('pipeline:startRefinement', async (_event, rawIdea: string) => {
+                if (!aiService) return { error: 'AI service not initialized' };
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService,
+                                agentDeps: {
+                                        aiService,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+
+                        // Forward pipeline events to renderer
+                        pipeline.onEvent((event: PipelineEvent) => {
+                                sendToRenderer('pipeline:event', event);
+                        });
+
+                        const response = await pipeline.startRefinement(rawIdea);
+                        return { success: true, response, spec: pipeline.state.spec };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:continueRefinement', async (_event, userInput: string) => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        const response = await pipeline.continueRefinement(userInput);
+                        return { success: true, response, spec: pipeline.state.spec };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:approveSpec', async () => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        const spec = pipeline.approveSpec();
+
+                        // Auto-generate plan after spec approval
+                        const plan = await pipeline.generatePlan();
+                        return { success: true, spec, plan };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:rejectSpec', async (_event, feedback: string) => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        pipeline.rejectSpec(feedback);
+                        return { success: true };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:configurePreFlight', async (_event, config: IPreFlightConfig) => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        pipeline.configurePreFlight(config);
+                        return { success: true };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:execute', async () => {
+                if (!aiService) return { error: 'AI service not initialized' };
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService,
+                                agentDeps: {
+                                        aiService,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+
+                        const stream = pipeline.executePlan();
+                        for await (const event of stream) {
+                                sendToRenderer('pipeline:event', event);
+                        }
+                        return { success: true, state: pipeline.state };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:abort', async () => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        pipeline.abort();
+                        return { success: true };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:getState', async () => {
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService: aiService!,
+                                agentDeps: {
+                                        aiService: aiService!,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        return pipeline.state;
+                } catch {
+                        return { phase: 'idle', spec: null, plan: null, preflightConfig: null, completedMilestones: 0, totalMilestones: 0, error: null };
+                }
+        });
+
+        ipcMain.handle('pipeline:startV2Refinement', async (_event, v2Feedback: string) => {
+                if (!aiService) return { error: 'AI service not initialized' };
+                try {
+                        const pipeline = getPipelineOrchestrator({
+                                aiService,
+                                agentDeps: {
+                                        aiService,
+                                        toolRegistry: initToolRegistry(),
+                                        pendingChanges: pendingChangesService,
+                                        workspaceRoots: { getWorkspaceRoots: () => getAppState().workspaceRoots.roots },
+                                },
+                                workspacePath: getAppState().workspaceRoots.roots[0] ?? process.cwd(),
+                        });
+                        const response = await pipeline.startV2Refinement(v2Feedback);
+                        return { success: true, response, spec: pipeline.state.spec };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('pipeline:reset', async () => {
+                resetPipelineOrchestrator();
+                return { success: true };
         });
 
         // ---- Window controls (for frameless title bar) ----

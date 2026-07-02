@@ -54,6 +54,18 @@ const api = {
         windowClose: () => ipcRenderer.invoke('window:close'),
         windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
 
+        // ---- Pipeline (Idea-to-Execution) ----
+        pipelineStartRefinement: (rawIdea: string) => ipcRenderer.invoke('pipeline:startRefinement', rawIdea),
+        pipelineContinueRefinement: (userInput: string) => ipcRenderer.invoke('pipeline:continueRefinement', userInput),
+        pipelineApproveSpec: () => ipcRenderer.invoke('pipeline:approveSpec'),
+        pipelineRejectSpec: (feedback: string) => ipcRenderer.invoke('pipeline:rejectSpec', feedback),
+        pipelineConfigurePreFlight: (config: unknown) => ipcRenderer.invoke('pipeline:configurePreFlight', config),
+        pipelineExecute: () => ipcRenderer.invoke('pipeline:execute'),
+        pipelineAbort: () => ipcRenderer.invoke('pipeline:abort'),
+        pipelineGetState: () => ipcRenderer.invoke('pipeline:getState'),
+        pipelineStartV2Refinement: (v2Feedback: string) => ipcRenderer.invoke('pipeline:startV2Refinement', v2Feedback),
+        pipelineReset: () => ipcRenderer.invoke('pipeline:reset'),
+
         // ---- Swarm (multi-agent) ----
         swarmExecute: (plan: unknown) => ipcRenderer.invoke('swarm:execute', plan),
         swarmApprovePartition: () => ipcRenderer.invoke('swarm:approvePartition'),
@@ -88,6 +100,26 @@ const api = {
                 const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
                 ipcRenderer.on('swarm:event', handler);
                 return () => { ipcRenderer.removeListener('swarm:event', handler); };
+        },
+        onFileChanged: (callback: (event: unknown) => void) => {
+                const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+                ipcRenderer.on('file:changed', handler);
+                return () => { ipcRenderer.removeListener('file:changed', handler); };
+        },
+        onFileCreated: (callback: (event: unknown) => void) => {
+                const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+                ipcRenderer.on('file:created', handler);
+                return () => { ipcRenderer.removeListener('file:created', handler); };
+        },
+        onFileDeleted: (callback: (event: unknown) => void) => {
+                const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+                ipcRenderer.on('file:deleted', handler);
+                return () => { ipcRenderer.removeListener('file:deleted', handler); };
+        },
+        onPipelineEvent: (callback: (event: unknown) => void) => {
+                const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+                ipcRenderer.on('pipeline:event', handler);
+                return () => { ipcRenderer.removeListener('pipeline:event', handler); };
         },
 };
 

@@ -680,6 +680,75 @@ api.onSwarmEvent((event) => {
 });
 
 // ---------------------------------------------------------------------------
+// Pipeline event handling (Idea-to-Execution)
+// ---------------------------------------------------------------------------
+
+api.onPipelineEvent((event) => {
+  switch (event.type) {
+    case 'refinement_started':
+      addMessage('system', '🔍 Refinement started...');
+      break;
+    case 'refinement_round':
+      addMessage('system', `Round ${event.round}: ${event.question.slice(0, 100)}...`);
+      break;
+    case 'spec_updated':
+      if (event.spec) {
+        updateSpecCard(event.spec);
+        if (!_pipelineComplete) {
+          addMessage('system', `📝 Spec updated: ${event.spec.name} v${event.spec.version} (${event.spec.requirements.length} requirements)`);
+        }
+      }
+      break;
+    case 'spec_approved':
+      addMessage('system', `✅ Spec approved: ${event.spec.name}`);
+      break;
+    case 'plan_ready':
+      addMessage('system', `📋 Plan ready: ${event.milestoneCount} milestones, ${event.totalSteps} steps, ~${event.estimatedCredits} credits`);
+      break;
+    case 'preflight_configured':
+      addMessage('system', '⚙️ Pre-flight configured. Ready to execute.');
+      break;
+    case 'execution_started':
+      _pipelineComplete = false;
+      showPipelineProgress(0, event.totalMilestones, 'Execution starting...');
+      addMessage('system', `🚀 Execution started: ${event.totalMilestones} milestones`);
+      break;
+    case 'milestone_progress':
+      showPipelineProgress(event.completedMilestones, event.totalMilestones, event.currentMilestone);
+      break;
+    case 'swarm_started':
+      addMessage('system', `🐝 Swarm deployed: ${event.workerCount} workers`);
+      break;
+    case 'swarm_worker_update':
+      // Could update a swarm panel here — for now just log
+      break;
+    case 'execution_complete':
+      _pipelineComplete = true;
+      _hidePipelineProgress();
+      if (event.spec) {
+        updateSpecCard(event.spec);
+      }
+      _showCompletionCard(event.spec, event.allRequirementsMet);
+      addMessage('system', event.allRequirementsMet
+        ? '✅ All requirements satisfied!'
+        : '⚠️ Partial completion — some requirements not met.');
+      setState('idle');
+      break;
+    case 'v2_prompt':
+      // The v2 prompt is already shown via the completion card's "Run it again" button
+      addMessage('system', `🔄 v2 refinement available: ${event.unsatisfiedRequirements?.length || 0} unsatisfied requirements`);
+      break;
+    case 'pipeline_error':
+      addMessage('system', `❌ Pipeline error: ${event.error}${event.recoverable ? ' (recoverable)' : ''}`);
+      if (!event.recoverable) {
+        _hidePipelineProgress();
+        setState('idle');
+      }
+      break;
+  }
+});
+
+// ---------------------------------------------------------------------------
 // User actions
 // ---------------------------------------------------------------------------
 
@@ -701,16 +770,37 @@ async function sendTask() {
       setState('idle');
     }
   } else if (currentMode === 'refine') {
-    // Refine mode: send to refinement pipeline
+    // Refine mode: send to pipeline refinement
     setState('executing');
     _refinementActive = true;
     addMessage('system', '🔍 Refining your idea into a structured spec...');
-    const result = await api.sendTask(text);
-    if (result.error) {
-      addMessage('system', `❌ ${result.error}`);
+    try {
+      if (_currentSpec && _refinementActive) {
+        // Continue refinement conversation
+        const result = await api.pipelineContinueRefinement(text);
+        if (result.error) {
+          addMessage('system', `❌ ${result.error}`);
+          setState('idle');
+        } else if (result.spec) {
+          updateSpecCard(result.spec);
+          addMessage('agent', result.response);
+        }
+      } else {
+        // Start new refinement
+        const result = await api.pipelineStartRefinement(text);
+        if (result.error) {
+          addMessage('system', `❌ ${result.error}`);
+          setState('idle');
+        } else if (result.spec) {
+          updateSpecCard(result.spec);
+          addMessage('agent', result.response);
+        }
+      }
+    } catch (err) {
+      addMessage('system', `❌ Pipeline error: ${err.message || err}`);
       setState('idle');
     }
-    // The spec card will be updated when the refinement events come back
+    setState('idle');
   } else if (currentMode === 'swarm') {
     // Swarm mode: plan first, then auto-offer swarm partition
     setState('planning');
@@ -909,13 +999,26 @@ function _showCompletionCard(spec, allMet) {
     const v2Btn = document.createElement('button');
     v2Btn.className = 'btn-small btn-primary';
     v2Btn.textContent = 'Run it again (v2)';
-    v2Btn.addEventListener('click', () => {
+    v2Btn.addEventListener('click', async () => {
       currentMode = 'refine';
       document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('btn-mode-refine').classList.add('active');
       updatePlaceholder();
-      inputBox.value = 'I want to refine the spec based on execution results';
-      inputBox.focus();
+
+      // Start v2 refinement with pipeline backend
+      try {
+        addMessage('system', '🔄 Starting v2 refinement based on execution results...');
+        const unsatisfiedReqs = spec.requirements.filter(r => !r.satisfied).map(r => `[${r.priority}] ${r.label}: ${r.description}`).join('\n');
+        const result = await api.pipelineStartV2Refinement(`Unsatisfied requirements from previous run:\n${unsatisfiedReqs}\n\nPlease update the spec to address these gaps.`);
+        if (result.error) {
+          addMessage('system', `❌ v2 refinement failed: ${result.error}`);
+        } else if (result.spec) {
+          updateSpecCard(result.spec);
+          addMessage('agent', result.response);
+        }
+      } catch (err) {
+        addMessage('system', `❌ v2 pipeline error: ${err.message || err}`);
+      }
     });
     actions.appendChild(v2Btn);
   }
@@ -926,22 +1029,40 @@ function _showCompletionCard(spec, allMet) {
 }
 
 // ---- Approve/Reject spec buttons ----
-document.getElementById('btn-approve-spec').addEventListener('click', () => {
+document.getElementById('btn-approve-spec').addEventListener('click', async () => {
   if (!_currentSpec) return;
-  // Transition to planning state after spec approval
   addMessage('system', `✅ Spec approved: **${_currentSpec.name}** v${_currentSpec.version}. Generating plan...`);
   document.getElementById('spec-card').classList.add('hidden');
   state = 'planning';
-  // The actual plan generation will be handled by the backend pipeline
-  // For now, show the preflight card as a demo
-  document.getElementById('preflight-card').classList.remove('hidden');
   _refinementActive = false;
+
+  try {
+    const result = await api.pipelineApproveSpec();
+    if (result.error) {
+      addMessage('system', `❌ Plan generation failed: ${result.error}`);
+      setState('idle');
+      return;
+    }
+    if (result.plan) {
+      addMessage('system', `📋 Plan generated: ${result.plan.steps?.length || 0} steps, ${result.plan.milestones?.length || 0} milestones.`);
+      // Show the preflight card for execution config
+      document.getElementById('preflight-card').classList.remove('hidden');
+    }
+  } catch (err) {
+    addMessage('system', `❌ Pipeline error: ${err.message || err}`);
+    setState('idle');
+  }
 });
 
-document.getElementById('btn-reject-spec').addEventListener('click', () => {
+document.getElementById('btn-reject-spec').addEventListener('click', async () => {
   if (!_currentSpec) return;
   addMessage('system', '🔄 Spec revision requested. Continue refining...');
   _refinementActive = true;
+  try {
+    await api.pipelineRejectSpec('User requested revisions');
+  } catch (_err) {
+    // Non-critical — just log
+  }
 });
 
 // ---- Pre-flight card ----
@@ -949,7 +1070,7 @@ document.getElementById('preflight-allow-swarm').addEventListener('change', (e) 
   document.getElementById('preflight-workers-row').style.display = e.target.checked ? 'flex' : 'none';
 });
 
-document.getElementById('btn-execute-preflight').addEventListener('click', () => {
+document.getElementById('btn-execute-preflight').addEventListener('click', async () => {
   const config = {
     executionMode: document.getElementById('preflight-exec-mode').value,
     creditLimit: parseInt(document.getElementById('preflight-credit-limit').value) || 200,
@@ -962,6 +1083,26 @@ document.getElementById('btn-execute-preflight').addEventListener('click', () =>
   addMessage('system', `🚀 Executing with config: mode=${config.executionMode}, credits≤${config.creditLimit}${config.allowSwarm ? `, swarm=${config.maxWorkers} workers` : ''}`);
   state = 'executing';
   showPipelineProgress(0, 1, 'Starting execution...');
+
+  try {
+    // Configure preflight first
+    const configResult = await api.pipelineConfigurePreFlight(config);
+    if (configResult.error) {
+      addMessage('system', `❌ Pre-flight config failed: ${configResult.error}`);
+      setState('idle');
+      _hidePipelineProgress();
+      return;
+    }
+    // Then execute
+    const result = await api.pipelineExecute();
+    if (result.error) {
+      addMessage('system', `❌ Execution failed: ${result.error}`);
+    }
+  } catch (err) {
+    addMessage('system', `❌ Pipeline execution error: ${err.message || err}`);
+  }
+  setState('idle');
+  _hidePipelineProgress();
 });
 
 document.getElementById('btn-cancel-preflight').addEventListener('click', () => {

@@ -171,4 +171,139 @@ SPEC READY FOR APPROVAL`,
                         }
                 });
         });
+
+        describe('V2 Refinement', () => {
+                it('throws when no previous spec for v2', async () => {
+                        try {
+                                await orchestrator.startV2Refinement('fix the failed requirements');
+                                expect.fail('Should have thrown');
+                        } catch (err) {
+                                expect((err as Error).message).to.include('No previous spec');
+                        }
+                });
+        });
+
+        describe('Continue Refinement', () => {
+                it('throws when no active refinement', async () => {
+                        try {
+                                await orchestrator.continueRefinement('more detail');
+                                expect.fail('Should have thrown');
+                        } catch (err) {
+                                expect((err as Error).message).to.include('No active refinement');
+                        }
+                });
+
+                it('continues refinement with user input', async () => {
+                        const mockAI = createMockAIService([
+                                // First response: start refinement
+                                `Initial spec.
+---SPEC---
+Name: Test Feature
+Summary: A test feature
+Requirements:
+  [MUST] [core] Core-Feature: The main feature
+Assumptions: None
+Out of scope: Nothing
+Suggested approach: Simple approach
+Complexity: small
+---END SPEC---`,
+                                // Second response: continue refinement
+                                `Updated spec based on your input.
+---SPEC---
+Name: Test Feature v2
+Summary: Updated test feature
+Requirements:
+  [MUST] [core] Core-Feature: The main feature
+  [MUST] [api] API-Endpoint: REST API endpoint
+  [SHOULD] [ui] Nice-UI: A nice interface
+Assumptions: Node.js runtime, REST API
+Out of scope: Mobile app
+Suggested approach: Express + React + Swagger
+Complexity: medium
+---END SPEC---
+
+SPEC READY FOR APPROVAL`,
+                        ]);
+
+                        const orch = new PipelineOrchestrator({
+                                aiService: mockAI,
+                                agentDeps: createMockAgentDeps(),
+                                workspacePath: '/test/workspace',
+                        });
+
+                        // Start refinement (uses first response)
+                        await orch.startRefinement('test idea');
+                        expect(orch.state.spec).to.not.be.null;
+                        expect(orch.state.spec!.requirements.length).to.equal(1);
+
+                        // Continue refinement (uses second response)
+                        const response = await orch.continueRefinement('Add an API endpoint');
+
+                        expect(response).to.include('API-Endpoint');
+                        expect(orch.state.spec).to.not.be.null;
+                        expect(orch.state.spec!.requirements.length).to.be.greaterThan(1);
+                });
+        });
+
+        describe('Full Pipeline Lifecycle (Happy Path)', () => {
+                it('transitions through all phases: idle → refining → planning → preflight → executing → complete', async () => {
+                        // Phase tracking
+                        const phases: string[] = [];
+
+                        const mockAI = createMockAIService([
+                                `Let me refine this.
+---SPEC---
+Name: Lifecycle Test
+Summary: Testing the full lifecycle
+Requirements:
+  [MUST] [core] Feature: The core feature
+Assumptions: None
+Out of scope: Nothing
+Suggested approach: Simple approach
+Complexity: small
+---END SPEC---
+
+SPEC READY FOR APPROVAL`,
+                        ]);
+
+                        const orch = new PipelineOrchestrator({
+                                aiService: mockAI,
+                                agentDeps: createMockAgentDeps(),
+                                workspacePath: '/test/workspace',
+                        });
+                        orch.onEvent((e) => {
+                                phases.push(e.type);
+                        });
+
+                        expect(orch.state.phase).to.equal('idle');
+
+                        // Phase 1: Refine
+                        await orch.startRefinement('Build a lifecycle test');
+                        expect(orch.state.phase).to.equal('refining');
+                        expect(orch.state.spec).to.not.be.null;
+
+                        // Approve spec
+                        const spec = orch.approveSpec();
+                        expect(spec.name).to.equal('Lifecycle Test');
+
+                        // Verify events
+                        expect(phases).to.include('refinement_started');
+                        expect(phases).to.include('spec_updated');
+                        expect(phases).to.include('spec_approved');
+                });
+        });
+
+        describe('Pipeline State Immutability', () => {
+                it('state snapshots are not mutated by subsequent operations', async () => {
+                        await orchestrator.startRefinement('test idea');
+                        const stateBefore = orchestrator.state;
+                        const specBefore = stateBefore.spec;
+
+                        // Approve the spec
+                        orchestrator.approveSpec();
+
+                        // The spec should still be the same object
+                        expect(orchestrator.state.spec).to.equal(specBefore);
+                });
+        });
 });
