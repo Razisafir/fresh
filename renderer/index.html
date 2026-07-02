@@ -1042,11 +1042,34 @@
       window.fileTree = fileTree;
       console.log('[Layout] fileTree created');
 
-      // Load workspace into tree
+      // Load workspace into tree — use workspaceRoots() for a direct answer,
+      // fall back to getAppState(), and retry if main process isn't ready yet.
       try {
-        const appState = await api.getAppState();
-        if (appState.workspaceRoots && appState.workspaceRoots.length > 0) {
-          await fileTree.setWorkspaceRoot(appState.workspaceRoots[0]);
+        let roots = null;
+        // Try the direct workspaceRoots IPC first
+        try {
+          roots = await api.workspaceRoots();
+        } catch { /* not available */ }
+
+        // Fallback to getAppState()
+        if (!roots || roots.length === 0) {
+          const appState = await api.getAppState();
+          if (appState && appState.workspaceRoots) {
+            roots = appState.workspaceRoots;
+          }
+        }
+
+        // Retry once after a short delay if still empty (race condition guard)
+        if ((!roots || roots.length === 0) && api.workspaceRoots) {
+          await new Promise(r => setTimeout(r, 500));
+          try { roots = await api.workspaceRoots(); } catch { /* */ }
+        }
+
+        if (roots && roots.length > 0) {
+          console.log('[Layout] Loading workspace root:', roots[0]);
+          await fileTree.setWorkspaceRoot(roots[0]);
+        } else {
+          console.log('[Layout] No workspace roots set. Use File > Open Folder to set one.');
         }
       } catch (err) {
         console.error('[Layout] Failed to load workspace roots:', err);

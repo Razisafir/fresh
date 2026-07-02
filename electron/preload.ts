@@ -40,6 +40,7 @@ const api = {
 
         // ---- App operations ----
         pickFolder: () => ipcRenderer.invoke('app:pickFolder'),
+        workspaceRoots: () => ipcRenderer.invoke('app:workspaceRoots'),
         getConfig: () => ipcRenderer.invoke('app:getConfig'),
         updateConfig: (updates: Record<string, unknown>) => ipcRenderer.invoke('app:updateConfig', updates),
         getAppState: () => ipcRenderer.invoke('app:ready'),

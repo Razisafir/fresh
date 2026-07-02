@@ -128,11 +128,13 @@ app.whenReady().then(async () => {
                 logger.info(`[Main] File watcher started for ${state.workspaceRoots.roots.length} root(s).`);
         }
 
+        // Register IPC handlers BEFORE creating the window.
+        // The renderer calls api.getAppState() and api.listDirectory() on load,
+        // so the handlers must be registered first to avoid a race condition.
+        registerIpcHandlers();
+
         // Create the main window.
         createWindow();
-
-        // Register IPC handlers.
-        registerIpcHandlers();
 
         logger.info(
                 `Kovix ready. AI provider: ${aiService.activeProviderType ?? 'none'}, ` +
@@ -219,7 +221,23 @@ function registerIpcHandlers(): void {
                 }
                 const state = getAppState();
                 state.workspaceRoots.setRoots(result.filePaths);
+
+                // Restart the file watcher for the new workspace roots.
+                try {
+                        const fileWatcher = getFileWatcherService();
+                        fileWatcher.stopWatching();
+                        fileWatcher.startWatching([...state.workspaceRoots.roots]);
+                        logger.info(`[Main] File watcher restarted for ${state.workspaceRoots.roots.length} root(s).`);
+                } catch (watchErr) {
+                        logger.warn(`[Main] Failed to restart file watcher: ${watchErr}`);
+                }
+
                 return { cancelled: false, paths: result.filePaths };
+        });
+
+        ipcMain.handle('app:workspaceRoots', async () => {
+                if (!isAppStateInitialized()) return [];
+                return getAppState().workspaceRoots.roots;
         });
 
         ipcMain.handle('app:getConfig', async () => {
