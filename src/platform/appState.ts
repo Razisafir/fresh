@@ -23,6 +23,7 @@ import { logger } from '../util/logger';
 // ---------------------------------------------------------------------------
 
 const DEFAULT_CONFIG: IAppConfig = {
+        workspaceRoots: [],
         llmActiveProvider: 'anthropic',
         llmActiveModel: '',
         autonomyDefaultMode: 'major_milestone',
@@ -143,6 +144,16 @@ class MutableWorkspaceRoots implements IWorkspaceRoots {
         setRoots(roots: readonly string[]): void {
                 this._roots = roots;
                 logger.info(`[AppState] Workspace roots set: ${roots.join(', ') || '(none)'}`);
+                // Persist workspace roots to config so they survive app restart.
+                try {
+                        const config = getAppState().config as FileConfig;
+                        config.workspaceRoots = [...roots];
+                        config.save().catch(err => {
+                                logger.warn(`[AppState] Failed to persist workspace roots: ${err}`);
+                        });
+                } catch {
+                        // getAppState() may not be available during init — that's OK.
+                }
         }
 }
 
@@ -159,6 +170,8 @@ class FileConfig implements IAppConfig {
                 this._data = { ...DEFAULT_CONFIG };
         }
 
+        get workspaceRoots(): string[] { return this._data.workspaceRoots; }
+        set workspaceRoots(v: string[]) { this._data.workspaceRoots = v; }
         get llmActiveProvider(): string { return this._data.llmActiveProvider; }
         set llmActiveProvider(v: string) { this._data.llmActiveProvider = v; }
         get llmActiveModel(): string { return this._data.llmActiveModel; }
@@ -231,6 +244,15 @@ export async function initAppState(baseDir: string): Promise<void> {
         const workspaceRoots = new MutableWorkspaceRoots();
         const config = new FileConfig(baseDir);
         await config.load();
+
+        // Restore persisted workspace roots from config (survives app restart).
+        // Directly set _roots without calling setRoots() to avoid circular
+        // persistence (we're loading from config, no need to save back).
+        if (config.workspaceRoots && config.workspaceRoots.length > 0) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (workspaceRoots as any)._roots = config.workspaceRoots;
+                logger.info(`[AppState] Restored ${config.workspaceRoots.length} workspace root(s) from config.`);
+        }
 
         // Apply debugVerbose to logger
         // (logger reads config on each call, but we set it up here for consistency)

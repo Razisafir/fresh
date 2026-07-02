@@ -47,6 +47,8 @@ export interface IWorkspaceRoots {
  * state directory, with sensible defaults.
  */
 export interface IAppConfig {
+        /** Persisted workspace root paths. Survives app restart. */
+        workspaceRoots: string[];
         /** Active LLM provider (default: 'anthropic'). */
         llmActiveProvider: string;
         /** Active LLM model ID (default: ''). */
