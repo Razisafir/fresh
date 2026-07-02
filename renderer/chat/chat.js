@@ -1122,11 +1122,24 @@ btnFolder.addEventListener('click', async () => {
   if (!result.cancelled) {
     addMessage('system', `📂 Opened: ${result.paths.join(', ')}`);
     // Notify Layout B file tree
-    if (window.fileTree && result.paths.length > 0) {
-      console.log('[Chat] Setting fileTree workspace root:', result.paths[0]);
-      await window.fileTree.setWorkspaceRoot(result.paths[0]);
+    if (result.paths && result.paths.length > 0) {
+      // Wait briefly for window.fileTree if initLayout hasn't finished yet
+      let ft = window.fileTree;
+      if (!ft) {
+        for (let i = 0; i < 10; i++) {
+          await new Promise(r => setTimeout(r, 200));
+          ft = window.fileTree;
+          if (ft) break;
+        }
+      }
+      if (ft) {
+        console.log('[Chat] Setting fileTree workspace root:', result.paths[0]);
+        await ft.setWorkspaceRoot(result.paths[0]);
+      } else {
+        console.warn('[Chat] window.fileTree not available after waiting');
+      }
     } else {
-      console.warn('[Chat] window.fileTree not available or no paths returned');
+      console.warn('[Chat] No paths returned from pickFolder');
     }
   }
 });

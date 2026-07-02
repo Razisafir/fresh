@@ -947,6 +947,13 @@
 
     let currentLayoutMode = localStorage.getItem('kovix-layout') || 'ide';
 
+    // IMPORTANT: These must be declared before setLayoutMode() is called,
+    // because setLayoutMode() references kovixEditor. Declaring with let
+    // after the call site causes a temporal-dead-zone ReferenceError
+    // that crashes the entire script.
+    let fileTree = null;
+    let kovixEditor = null;
+
     function setLayoutMode(mode) {
       currentLayoutMode = mode;
       localStorage.setItem('kovix-layout', mode);
@@ -1025,9 +1032,8 @@
     setLayoutMode(currentLayoutMode);
 
     // ---- Initialize components ----
-
-    let fileTree = null;
-    let kovixEditor = null;
+    // (fileTree and kovixEditor are declared above, before setLayoutMode()
+    //  is first called, to avoid temporal-dead-zone ReferenceErrors.)
 
     // Tab management state
     const openTabs = [];      // [{filePath, name}]
