@@ -422,7 +422,7 @@ function parseLogOutput(raw: string): IGitCommit[] {
 
         for (const record of records) {
                 // Strip leading/trailing delimiters and split
-                const fields = record.replace(/^\x00/, '').replace(/\x00$/, '').split(LOG_FIELD_DELIM);
+                const fields = record.replace(/^\x00/, '').replace(/\x00$/, '').split(LOG_FIELD_DELIM); // eslint-disable-line no-control-regex
                 if (fields.length < 7) continue;
 
                 const [hash, shortHash, author, email, dateStr, message, parentsStr] = fields;

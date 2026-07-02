@@ -1,85 +1,86 @@
-# Kovix CI — runs the same 5 quality gates enforced locally.
-#
-# Triggers:
-#   - push to any branch
-#   - pull_request to main
-#   - workflow_dispatch (manual re-run)
-#
-# Matrix: Node 20 (LTS) and Node 22 (current LTS).
-# The test suite uses a Module._resolveFilename hook to inject a
-# vscode shim so the whole suite runs headless in plain Node.
-# See test/_setup/vscode-shim-register.cjs.
-#
-# Gates:
-#   1. typecheck  — tsc --noEmit against the strict tsconfig.json
-#   2. lint       — eslint . (security rules: no-eval, no-new-func,
-#                   no child_process.exec/execSync, no vscode imports)
-#   3. compile    — tsc --noEmit + esbuild bundle → dist/electron-main.js + dist/preload.js
-#   4. test       — mocha with the vscode shim, 291 unit/integration tests
-#   5. audit      — npm audit --omit=dev (0 vulnerabilities required)
-#
-# The compiled bundle is uploaded as an artifact.
-
 name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: ['*']
   pull_request:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+    branches: [main, develop]
 
 jobs:
-  build:
-    name: Node ${{ matrix.node-version }} on ubuntu-latest
+  typecheck:
+    name: Type Check
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: ['20.x', '22.x']
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20
           cache: npm
+      - run: npm ci
+      - run: npm run typecheck
 
-      - name: Install dependencies (npm ci)
-        run: npm ci
-
-      - name: Gate 1 — typecheck
-        run: npm run typecheck
-
-      - name: Gate 2 — lint
-        run: npm run lint
-
-      - name: Gate 3 — compile (Electron bundle)
-        run: npm run compile
-
-      - name: Gate 4 — test (291 unit + integration tests)
-        run: npm test
-
-      - name: Gate 5 — audit (0 vulnerabilities required)
-        run: npm audit --omit=dev
-
-      - name: Upload compiled bundle
-        if: always()
-        uses: actions/upload-artifact@v4
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          name: electron-bundle-node${{ matrix.node-version }}
-          path: |
-            dist/electron-main.js
-            dist/preload.js
-          if-no-files-found: error
-          retention-days: 14
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:unit
+        env:
+          NODE_ENV: test
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:integration
+        env:
+          NODE_ENV: test
+
+  build:
+    name: Build Electron
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run compile
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true

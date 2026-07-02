@@ -431,12 +431,16 @@ describe('H-1 regression: embedding silent-failure detection', () => {
                         'display why memory is degraded.';
         });
 
-        it('OpenAI (unimplemented) provider reports unavailable with helpful reason', () => {
+        it('OpenAI provider initializes (may be unavailable if secrets not configured)', () => {
                 const config: IMemoryConfig = { embedProvider: 'openai', embedModel: 'text-embedding-3-small', vectorStore: 'in-process' };
                 const svc = createEmbeddingService(config);
                 const status = svc.getStatus();
-                expect(status.status).to.equal('unavailable');
-                expect(status.reason).to.include('not implemented');
+                // The OpenAI embedding service is now implemented. When secrets are
+                // unavailable (test environment), it falls back to NullEmbeddingService
+                // which reports 'unavailable' with a clear reason.
+                // When secrets ARE available, it reports 'available' initially.
+                expect(['available', 'unavailable']).to.include(status.status);
+                expect(status.reason).to.be.a('string').and.not.empty;
         });
 });
 

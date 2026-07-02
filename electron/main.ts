@@ -658,7 +658,7 @@ function registerIpcHandlers(): void {
         ipcMain.handle('indexer:start', async (_event, rootPath: string, options?: unknown) => {
                 const indexer = getCodebaseIndexer();
                 const results = [];
-                for await (const progress of indexer.indexWorkspace(rootPath, options as any)) {
+                for await (const progress of indexer.indexWorkspace(rootPath, options as Record<string, unknown>)) {
                         sendToRenderer('indexer:progress', progress);
                         results.push(progress);
                 }
@@ -666,11 +666,11 @@ function registerIpcHandlers(): void {
         });
 
         ipcMain.handle('indexer:search', async (_event, query: string, options?: unknown) => {
-                return await getCodebaseIndexer().search(query, options as any);
+                return await getCodebaseIndexer().search(query, options as Record<string, unknown>);
         });
 
         ipcMain.handle('indexer:fileContext', async (_event, filePath: string, options?: unknown) => {
-                return await getCodebaseIndexer().getFileContext(filePath, options as any);
+                return await getCodebaseIndexer().getFileContext(filePath, options as Record<string, unknown>);
         });
 
         // ---- File watcher ----

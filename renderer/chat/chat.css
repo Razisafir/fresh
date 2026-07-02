@@ -1200,3 +1200,297 @@ html, body {
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+/* ==========================================================================
+   Spec Card — Refine mode spec display
+   ========================================================================== */
+
+.spec-card {
+  margin: 8px 12px;
+  border: 1px solid #7c83ff40;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.spec-card.hidden { display: none; }
+
+.spec-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #7c83ff12;
+  border-bottom: 1px solid #7c83ff30;
+}
+
+.spec-icon { font-size: 16px; }
+
+.spec-title {
+  flex: 1;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.spec-version {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: #7c83ff;
+  background: #7c83ff18;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.spec-card-body {
+  padding: 12px 14px;
+}
+
+.spec-section {
+  margin-bottom: 10px;
+}
+
+.spec-section:last-child { margin-bottom: 0; }
+
+.spec-section label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.spec-section p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.spec-section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.spec-section li {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 3px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.spec-section li:last-child { border-bottom: none; }
+
+.spec-req-priority {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-right: 6px;
+}
+
+.spec-req-priority.must { background: #da363330; color: #f85149; }
+.spec-req-priority.should { background: #d2992230; color: #e3b341; }
+.spec-req-priority.could { background: #7c83ff20; color: #7c83ff; }
+
+.spec-req-satisfied { color: #3fb950; margin-left: 6px; }
+.spec-req-unsatisfied { color: #f85149; margin-left: 6px; }
+
+.spec-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #21262d;
+  color: var(--text-secondary);
+}
+
+.spec-card-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid #21262d;
+}
+
+/* ==========================================================================
+   Pre-flight Card — Execution configuration
+   ========================================================================== */
+
+.preflight-card {
+  margin: 8px 12px;
+  border: 1px solid #3fb95040;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.preflight-card.hidden { display: none; }
+
+.preflight-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #3fb95012;
+  border-bottom: 1px solid #3fb95030;
+}
+
+.preflight-icon { font-size: 16px; }
+
+.preflight-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.preflight-card-body {
+  padding: 12px 14px;
+}
+
+.preflight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.preflight-row:last-child { border-bottom: none; }
+
+.preflight-row label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.preflight-row select,
+.preflight-row input[type="number"] {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+}
+
+.preflight-row select:focus,
+.preflight-row input:focus {
+  border-color: #7c83ff;
+}
+
+.preflight-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #7c83ff;
+}
+
+.preflight-card-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid #21262d;
+}
+
+/* ==========================================================================
+   Pipeline Progress — Execution progress bar
+   ========================================================================== */
+
+.pipeline-progress {
+  margin: 8px 12px;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.pipeline-progress.hidden { display: none; }
+
+.pipeline-progress-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.pipeline-icon { font-size: 16px; }
+
+#pipeline-progress-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.pipeline-progress-bar {
+  height: 6px;
+  background: #21262d;
+  margin: 0 14px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.pipeline-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c83ff, #3fb950);
+  border-radius: 3px;
+  transition: width 400ms ease;
+}
+
+.pipeline-progress-detail {
+  padding: 8px 14px 12px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   Completion Card — Shown after execution
+   ========================================================================== */
+
+.completion-card {
+  margin: 8px 12px;
+  border: 1px solid #3fb95050;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.completion-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #3fb95010;
+  border-bottom: 1px solid #3fb95030;
+}
+
+.completion-card-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #3fb950;
+  margin: 0;
+}
+
+.completion-card-body {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.completion-req-status {
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.completion-card-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid #21262d;
+}

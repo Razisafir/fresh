@@ -17,22 +17,22 @@
  * A single memory entry stored in the vector index.
  */
 export interface IMemoryEntry {
-	/** Unique ID (used as the HNSW label). */
-	id: number;
-	/** The original text content (pre-embedding). */
-	text: string;
-	/** When the entry was stored (ISO 8601). */
-	timestamp: string;
-	/** Optional metadata (e.g. task type, source). */
-	metadata?: Record<string, unknown>;
+        /** Unique ID (used as the HNSW label). */
+        id: number;
+        /** The original text content (pre-embedding). */
+        text: string;
+        /** When the entry was stored (ISO 8601). */
+        timestamp: string;
+        /** Optional metadata (e.g. task type, source). */
+        metadata?: Record<string, unknown>;
 }
 
 /**
  * A retrieved memory entry, with its similarity score.
  */
 export interface IMemoryMatch extends IMemoryEntry {
-	/** Cosine similarity score in [0, 1]. Higher = more similar. */
-	score: number;
+        /** Cosine similarity score in [0, 1]. Higher = more similar. */
+        score: number;
 }
 
 /**
@@ -40,12 +40,14 @@ export interface IMemoryMatch extends IMemoryEntry {
  * (kovix.memory.*).
  */
 export interface IMemoryConfig {
-	/** 'ollama' | 'openai' | 'none'. 'none' disables the service. */
-	embedProvider: 'ollama' | 'openai' | 'none';
-	/** Embedding model name (e.g. 'nomic-embed-text'). */
-	embedModel: string;
-	/** Vector store backend. Only 'in-process' (hnswlib-node) is wired. */
-	vectorStore: 'in-process' | 'qdrant';
-	/** Ollama API base URL (default http://localhost:11434). */
-	ollamaBaseUrl?: string;
+        /** 'ollama' | 'openai' | 'none'. 'none' disables the service. */
+        embedProvider: 'ollama' | 'openai' | 'none';
+        /** Embedding model name (e.g. 'nomic-embed-text'). */
+        embedModel: string;
+        /** Vector store backend. Only 'in-process' (hnswlib-node) is wired. */
+        vectorStore: 'in-process' | 'qdrant';
+        /** Ollama API base URL (default http://localhost:11434). */
+        ollamaBaseUrl?: string;
+        /** OpenAI API base URL (default https://api.openai.com/v1). For Azure or proxies. */
+        openaiBaseUrl?: string;
 }
