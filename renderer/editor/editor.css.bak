@@ -7,15 +7,15 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: #1E1E1E;
+  background: #0d1117;
 }
 
 .editor-header {
   display: flex;
   align-items: center;
   padding: 2px 12px;
-  background: #1E1E1E;
-  border-bottom: 1px solid #2D2D30;
+  background: #0d1117;
+  border-bottom: 1px solid #161b22;
   flex-shrink: 0;
   min-height: 26px;
 }
@@ -23,7 +23,7 @@
 .editor-file-path {
   font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
   font-size: 11px;
-  color: #5A5A5A;
+  color: #484f58;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -35,8 +35,8 @@
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(0, 122, 204, 0.12);
-  color: #007ACC;
+  background: rgba(124, 131, 255, 0.12);
+  color: #7c83ff;
   margin-left: 8px;
   flex-shrink: 0;
 }
@@ -60,23 +60,21 @@
 }
 
 .btn-editor-accept {
-  background: linear-gradient(135deg, #8A2BE2, #FF6B6B);
+  background: #238636;
   color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
 .btn-editor-accept:hover {
-  background: linear-gradient(135deg, #7B1FD4, #FF5555);
-  box-shadow: 0 0 14px rgba(138, 43, 226, 0.35);
+  background: #2ea043;
 }
 
 .btn-editor-reject {
-  background: #3C3C3C;
-  color: #D4D4D4;
+  background: #da3633;
+  color: #fff;
 }
 
 .btn-editor-reject:hover {
-  background: #4C4C4C;
+  background: #f85149;
 }
 
 .editor-container {
@@ -90,7 +88,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #5A5A5A;
+  color: #484f58;
   gap: 8px;
 }
 
@@ -104,12 +102,12 @@
 .editor-empty-title {
   font-size: 16px;
   font-weight: 500;
-  color: #5A5A5A;
+  color: #484f58;
 }
 
 .editor-empty-hint {
   font-size: 12px;
-  color: #3C3C3C;
+  color: #30363d;
 }
 
 .editor-empty-shortcuts {
@@ -120,7 +118,7 @@
 
 .editor-shortcut {
   font-size: 11px;
-  color: #5A5A5A;
+  color: #484f58;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -131,17 +129,17 @@
   padding: 2px 6px;
   font-size: 10px;
   font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
-  background: #2D2D30;
-  border: 1px solid #3C3C3C;
+  background: #161b22;
+  border: 1px solid #21262d;
   border-radius: 4px;
-  color: #858585;
+  color: #8b949e;
 }
 
 /* Override Monaco to match our deep dark theme */
 .editor-container .monaco-editor,
 .editor-container .monaco-editor .margin,
 .editor-container .monaco-editor-background {
-  background-color: #1E1E1E !important;
+  background-color: #0d1117 !important;
 }
 
 .editor-container .monaco-editor .line {
@@ -158,7 +156,7 @@
 }
 
 [data-theme="light"] .editor-empty-hint {
-  color: #858585;
+  color: #8b949e;
 }
 
 [data-theme="light"] .editor-shortcut {

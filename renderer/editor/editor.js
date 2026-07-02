@@ -155,8 +155,12 @@ class KovixEditor {
     this.emptyEl.className = 'editor-empty';
     this.emptyEl.innerHTML = `
       <div class="editor-empty-icon">{ }</div>
-      <div>Select a file to view</div>
-      <div class="editor-empty-hint">Click a file in the tree or run an agent task</div>
+      <div class="editor-empty-title">No file open</div>
+      <div class="editor-empty-hint">Click a file in the tree or run an agent task to get started</div>
+      <div class="editor-empty-shortcuts">
+        <span class="editor-shortcut"><kbd>Ctrl+B</kbd> Toggle file tree</span>
+        <span class="editor-shortcut"><kbd>Ctrl+J</kbd> Toggle chat</span>
+      </div>
     `;
     this.container.appendChild(this.emptyEl);
   }
@@ -243,7 +247,7 @@ class KovixEditor {
     // Create editor — READ ONLY
     this.editor = this.monaco.editor.create(this.editorWrapperEl, {
       model: this.currentModel,
-      theme: 'kovix-dark',
+      theme: this._getTheme(),
       readOnly: true,
       minimap: { enabled: false },
       fontSize: 13,
@@ -283,7 +287,7 @@ class KovixEditor {
     const modifiedModel = this.monaco.editor.createModel(proposedContent || '', language);
 
     this.diffEditor = this.monaco.editor.createDiffEditor(this.editorWrapperEl, {
-      theme: 'kovix-dark',
+      theme: this._getTheme(),
       readOnly: true,
       renderSideBySide: true,
       minimap: { enabled: false },
@@ -375,6 +379,13 @@ class KovixEditor {
 
   _escapeHtml(text) {
     return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /**
+   * Get the Monaco theme based on current app theme.
+   */
+  _getTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'light' ? 'vs' : 'kovix-dark';
   }
 
   dispose() {

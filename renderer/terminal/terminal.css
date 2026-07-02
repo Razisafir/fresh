@@ -1,0 +1,226 @@
+/* ==========================================================================
+   Terminal Panel — VS Code Dark+ themed integrated terminal
+   ========================================================================== */
+
+#terminal-panel {
+  display: flex;
+  flex-direction: column;
+  background: #1E1E1E;
+  border-top: 1px solid #3C3C3C;
+  min-height: 36px;
+  max-height: 400px;
+  height: 200px;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: height 0ms;
+}
+
+#terminal-panel.collapsed {
+  height: 36px !important;
+  min-height: 36px;
+  max-height: 36px;
+  overflow: hidden;
+}
+
+/* Terminal header (tab bar) */
+.terminal-header {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  min-height: 36px;
+  background: #252526;
+  border-bottom: 1px solid #3C3C3C;
+  padding: 0 8px;
+  gap: 8px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.terminal-header-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #5A5A5A;
+  flex-shrink: 0;
+}
+
+.terminal-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.terminal-tabs::-webkit-scrollbar {
+  height: 3px;
+}
+
+.terminal-tabs::-webkit-scrollbar-thumb {
+  background: #3C3C3C;
+  border-radius: 3px;
+}
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: #858585;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.terminal-tab:hover {
+  background: #2D2D30;
+  color: #D4D4D4;
+}
+
+.terminal-tab.active {
+  background: #1E1E1E;
+  color: #D4D4D4;
+  border: 1px solid #3C3C3C;
+  border-bottom-color: #1E1E1E;
+}
+
+.terminal-tab-close {
+  background: none;
+  border: none;
+  color: #5A5A5A;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 3px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.terminal-tab-close:hover {
+  background: #da363340;
+  color: #da3633;
+}
+
+.terminal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.terminal-btn {
+  background: none;
+  border: none;
+  color: #858585;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.terminal-btn:hover {
+  background: #2D2D30;
+  color: #D4D4D4;
+}
+
+/* Resize handle at the top of terminal */
+.terminal-resize-handle {
+  height: 3px;
+  cursor: row-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 120ms ease;
+  position: relative;
+  top: 0;
+  z-index: 5;
+}
+
+.terminal-resize-handle:hover,
+.terminal-resize-handle.active {
+  background: #007ACC;
+}
+
+/* Terminal body (xterm.js container) */
+.terminal-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  padding: 4px 0 0 8px;
+  background: #1E1E1E;
+}
+
+.terminal-body .xterm {
+  height: 100%;
+  width: 100%;
+}
+
+/* Empty state when no terminals */
+.terminal-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #5A5A5A;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Light theme support */
+[data-theme="light"] #terminal-panel {
+  background: #FFFFFF;
+  border-top-color: #D4D4D4;
+}
+
+[data-theme="light"] .terminal-header {
+  background: #F3F3F3;
+  border-bottom-color: #D4D4D4;
+}
+
+[data-theme="light"] .terminal-header-title {
+  color: #6E6E6E;
+}
+
+[data-theme="light"] .terminal-tab {
+  color: #6E6E6E;
+}
+
+[data-theme="light"] .terminal-tab:hover {
+  background: #E8E8E8;
+  color: #333333;
+}
+
+[data-theme="light"] .terminal-tab.active {
+  background: #FFFFFF;
+  color: #333333;
+  border-color: #D4D4D4;
+  border-bottom-color: #FFFFFF;
+}
+
+[data-theme="light"] .terminal-btn:hover {
+  background: #E8E8E8;
+  color: #333333;
+}
+
+[data-theme="light"] .terminal-body {
+  background: #FFFFFF;
+}
+
+[data-theme="light"] .terminal-empty {
+  color: #A0A0A0;
+}

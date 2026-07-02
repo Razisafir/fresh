@@ -80,7 +80,8 @@ function addMessage(role, content, extra) {
 
     const header = document.createElement('div');
     header.className = 'collapsible-header';
-    header.innerHTML = `<span class="collapsible-chevron">${extra.defaultCollapsed ? '\u25B6' : '\u25BC'}</span> <span class="collapsible-title">${escapeHtml(extra.collapsibleTitle || content.slice(0, 80))}</span>`;
+    const titleText = extra.collapsibleTitle || content.slice(0, 100);
+    header.innerHTML = `<span class="collapsible-chevron">${extra.defaultCollapsed ? '\u25B6' : '\u25BC'}</span> <span class="collapsible-title">${escapeHtml(titleText)}</span>`;
     header.addEventListener('click', () => {
       div.classList.toggle('collapsed');
       const chevron = header.querySelector('.collapsible-chevron');
@@ -110,24 +111,31 @@ function renderMarkdown(text) {
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     // Bold
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    // Italic
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    // Italic (single * that are not inside **)
+    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>')
     // Headers
     .replace(/^### (.+)$/gm, '<h4>$1</h4>')
     .replace(/^## (.+)$/gm, '<h3>$1</h3>')
     .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-    // Lists (simple: - item)
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    // Lists (simple: - item or * item)
+    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
     // Numbered lists
     .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
     // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     // Paragraphs (double newline)
     .replace(/\n\n/g, '</p><p>')
     // Single newlines within paragraphs
     .replace(/\n/g, '<br>');
   // Wrap loose <li> in <ul>
   html = html.replace(/(<li>.*?<\/li>)+/gs, '<ul>$&</ul>');
+  // Sanitize with DOMPurify if available
+  if (typeof DOMPurify !== 'undefined') {
+    html = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'pre', 'code', 'a'],
+      ALLOWED_ATTR: ['href', 'target', 'rel'],
+    });
+  }
   return '<p>' + html + '</p>';
 }
 

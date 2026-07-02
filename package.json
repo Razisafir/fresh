@@ -1,6 +1,6 @@
 {
   "name": "kovix",
-  "description": "AI-native development environment with Plan\u2192Approve\u2192Execute\u2192Verify agent loop, multi-provider LLM, MCP servers, and semantic memory.",
+  "description": "AI-native development environment with Plan→Approve→Execute→Verify agent loop, multi-provider LLM, MCP servers, and semantic memory.",
   "version": "0.1.0-alpha",
   "license": "MIT",
   "repository": {
@@ -47,7 +47,10 @@
     "dompurify": "^3.4.11"
   },
   "dependencies": {
-    "monaco-editor": "^0.55.1"
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "monaco-editor": "^0.55.1",
+    "node-pty": "^1.1.0"
   },
   "optionalDependencies": {
     "hnswlib-node": "^3.0.0"
@@ -65,7 +68,9 @@
     "files": [
       "dist/**",
       "renderer/**",
-      "media/**"
+      "media/**",
+      "node_modules/@xterm/**",
+      "node_modules/node-pty/**"
     ],
     "mac": {
       "target": "dmg"

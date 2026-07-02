@@ -122,6 +122,23 @@ const api = {
                 ipcRenderer.on('pipeline:event', handler);
                 return () => { ipcRenderer.removeListener('pipeline:event', handler); };
         },
+
+        // ---- Terminal (node-pty) ----
+        terminalCreate: (options?: { cwd?: string; shell?: string }) => ipcRenderer.invoke('terminal:create', options),
+        terminalWrite: (id: string, data: string) => ipcRenderer.invoke('terminal:write', id, data),
+        terminalResize: (id: string, cols: number, rows: number) => ipcRenderer.invoke('terminal:resize', id, cols, rows),
+        terminalKill: (id: string) => ipcRenderer.invoke('terminal:kill', id),
+
+        onTerminalData: (callback: (data: { id: string; data: string }) => void) => {
+                const handler = (_event: Electron.IpcRendererEvent, data: { id: string; data: string }) => callback(data);
+                ipcRenderer.on('terminal:data', handler);
+                return () => { ipcRenderer.removeListener('terminal:data', handler); };
+        },
+        onTerminalExit: (callback: (data: { id: string; exitCode: number }) => void) => {
+                const handler = (_event: Electron.IpcRendererEvent, data: { id: string; exitCode: number }) => callback(data);
+                ipcRenderer.on('terminal:exit', handler);
+                return () => { ipcRenderer.removeListener('terminal:exit', handler); };
+        },
 };
 
 contextBridge.exposeInMainWorld('__kovix_api', api);

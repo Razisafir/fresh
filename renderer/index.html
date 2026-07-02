@@ -12,8 +12,41 @@
   <link rel="stylesheet" href="filetree/filetree.css">
   <link rel="stylesheet" href="editor/editor.css">
   <link rel="stylesheet" href="activity/activity.css">
+  <link rel="stylesheet" href="terminal/terminal.css">
   <link rel="stylesheet" href="light-theme.css">
+  <!-- xterm.js -->
+  <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css">
+  <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
   <style>
+    /* ==========================================================================
+       VS Code Dark+ Theme Override — overrides chat.css / filetree.css tokens
+       ========================================================================== */
+    :root {
+      --bg-base:       #1E1E1E;
+      --bg-surface:    #252526;
+      --bg-elevated:   #2D2D30;
+      --bg-hover:      #2D2D30;
+      --bg-active:     #3C3C3C;
+
+      --text-primary:  #D4D4D4;
+      --text-secondary:#858585;
+      --text-muted:    #5A5A5A;
+      --text-inverse:  #1E1E1E;
+
+      --accent:        #007ACC;
+      --accent-hover:  #005A9E;
+      --accent-muted:  rgba(0, 122, 204, 0.12);
+
+      --success:       #1E8A5A;
+      --warning:       #895723;
+      --error:         #F44747;
+      --info:          #007ACC;
+
+      --border:        #3C3C3C;
+      --border-focus:  var(--accent);
+    }
+
     /* ==========================================================================
        Layout B — Premium Chromium-style three-pane layout
        ========================================================================== */
@@ -23,11 +56,11 @@
       display: flex;
       align-items: center;
       height: 32px;
-      background: #010409;
+      background: #1E1E1E;
       flex-shrink: 0;
       -webkit-app-region: drag;   /* Entire bar is draggable */
       user-select: none;
-      border-bottom: 1px solid #21262d;
+      border-bottom: 1px solid #3C3C3C;
     }
 
     #titlebar-icon {
@@ -40,7 +73,7 @@
     }
 
     #titlebar-icon .logo {
-      color: #7c83ff;
+      color: #007ACC;
       font-size: 14px;
       font-weight: 700;
     }
@@ -57,7 +90,7 @@
     .titlebar-menu-item {
       background: none;
       border: none;
-      color: #8b949e;
+      color: #858585;
       font-size: 12px;
       padding: 4px 10px;
       cursor: pointer;
@@ -66,15 +99,15 @@
     }
 
     .titlebar-menu-item:hover {
-      background: #161b22;
-      color: #c9d1d9;
+      background: #2D2D30;
+      color: #D4D4D4;
     }
 
     #titlebar-title {
       flex: 1;
       text-align: center;
       font-size: 12px;
-      color: #484f58;
+      color: #5A5A5A;
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
@@ -96,14 +129,14 @@
       height: 32px;
       background: none;
       border: none;
-      color: #8b949e;
+      color: #858585;
       cursor: pointer;
       transition: background 120ms ease, color 120ms ease;
     }
 
     .titlebar-btn:hover {
-      background: #21262d;
-      color: #c9d1d9;
+      background: #2D2D30;
+      color: #D4D4D4;
     }
 
     .titlebar-btn.close:hover {
@@ -123,8 +156,8 @@
       align-items: center;
       justify-content: space-between;
       padding: 0 8px;
-      background: #010409;
-      border-bottom: 1px solid #21262d;
+      background: #1E1E1E;
+      border-bottom: 1px solid #3C3C3C;
       min-height: 40px;
       flex-shrink: 0;
       -webkit-app-region: no-drag;
@@ -151,7 +184,7 @@
     .toolbar-btn {
       background: none;
       border: none;
-      color: #8b949e;
+      color: #858585;
       font-size: 16px;
       cursor: pointer;
       padding: 4px 8px;
@@ -163,20 +196,20 @@
     }
 
     .toolbar-btn:hover {
-      background: #161b22;
-      color: #c9d1d9;
+      background: #2D2D30;
+      color: #D4D4D4;
     }
 
     .toolbar-btn.active {
-      background: #7c83ff20;
-      color: #7c83ff;
+      background: #007ACC20;
+      color: #007ACC;
     }
 
     /* Layout toggle button (Chat-only vs IDE) */
     .layout-toggle {
       display: flex;
-      background: #0d1117;
-      border: 1px solid #21262d;
+      background: #1E1E1E;
+      border: 1px solid #3C3C3C;
       border-radius: 8px;
       overflow: hidden;
     }
@@ -184,7 +217,7 @@
     .layout-btn {
       background: none;
       border: none;
-      color: #484f58;
+      color: #5A5A5A;
       font-size: 12px;
       font-weight: 600;
       padding: 5px 12px;
@@ -196,12 +229,12 @@
     }
 
     .layout-btn:hover {
-      color: #8b949e;
-      background: #161b22;
+      color: #858585;
+      background: #2D2D30;
     }
 
     .layout-btn.active {
-      background: #7c83ff;
+      background: #007ACC;
       color: #fff;
     }
 
@@ -210,8 +243,8 @@
       position: absolute;
       top: 100%;
       left: 0;
-      background: #161b22;
-      border: 1px solid #21262d;
+      background: #252526;
+      border: 1px solid #3C3C3C;
       border-radius: 8px;
       padding: 4px 0;
       min-width: 200px;
@@ -229,24 +262,30 @@
       align-items: center;
       justify-content: space-between;
       padding: 8px 16px;
-      color: #c9d1d9;
+      color: #D4D4D4;
       font-size: 13px;
       cursor: pointer;
       transition: background 80ms ease;
     }
 
     .view-dropdown-item:hover {
-      background: #7c83ff15;
+      background: #007ACC15;
     }
 
     .view-dropdown-item .check {
-      color: #7c83ff;
+      color: #007ACC;
       font-size: 14px;
+    }
+
+    .shortcut-hint {
+      font-size: 11px;
+      color: #5A5A5A;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
 
     .view-dropdown-divider {
       height: 1px;
-      background: #21262d;
+      background: #3C3C3C;
       margin: 4px 0;
     }
 
@@ -290,9 +329,9 @@
 
     /* Provider & model selects — Chromium pill style */
     .toolbar-select {
-      background: #0d1117;
-      color: #8b949e;
-      border: 1px solid #21262d;
+      background: #1E1E1E;
+      color: #858585;
+      border: 1px solid #3C3C3C;
       border-radius: 6px;
       padding: 3px 10px;
       font-size: 12px;
@@ -302,19 +341,19 @@
     }
 
     .toolbar-select:hover {
-      border-color: #7c83ff;
-      color: #c9d1d9;
+      border-color: #007ACC;
+      color: #D4D4D4;
     }
 
     .toolbar-select:focus {
-      border-color: #7c83ff;
+      border-color: #007ACC;
     }
 
     /* Mode toggle — segmented pill */
     .mode-toggle {
       display: flex;
-      background: #0d1117;
-      border: 1px solid #21262d;
+      background: #1E1E1E;
+      border: 1px solid #3C3C3C;
       border-radius: 8px;
       overflow: hidden;
     }
@@ -322,7 +361,7 @@
     .mode-btn {
       background: none;
       border: none;
-      color: #484f58;
+      color: #5A5A5A;
       font-size: 11px;
       font-weight: 600;
       padding: 5px 14px;
@@ -333,12 +372,12 @@
     }
 
     .mode-btn:hover {
-      color: #8b949e;
-      background: #161b22;
+      color: #858585;
+      background: #2D2D30;
     }
 
     .mode-btn.active {
-      background: #7c83ff;
+      background: #007ACC;
       color: #fff;
     }
 
@@ -368,8 +407,8 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: #010409;
-      border-right: 1px solid #21262d;
+      background: #252526;
+      border-right: 1px solid #3C3C3C;
     }
 
     /* Editor pane */
@@ -379,25 +418,24 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: #0d1117;
+      background: #1E1E1E;
     }
 
     /* Agent activity container (bottom of editor pane) */
     #agent-activity-container {
       height: 200px;
       min-height: 36px;
-      max-height: 400px;
+      max-height: 600px;
       flex-shrink: 0;
       overflow: hidden;
-      transition: height 0.2s ease;
     }
 
     /* Tab bar */
     #tab-bar {
       display: flex;
       align-items: stretch;
-      background: #010409;
-      border-bottom: 1px solid #21262d;
+      background: #1E1E1E;
+      border-bottom: 1px solid #3C3C3C;
       min-height: 36px;
       flex-shrink: 0;
       overflow-x: auto;
@@ -409,7 +447,7 @@
     }
 
     #tab-bar::-webkit-scrollbar-thumb {
-      background: #21262d;
+      background: #3C3C3C;
       border-radius: 3px;
     }
 
@@ -420,8 +458,8 @@
       padding: 0 12px;
       min-width: 120px;
       max-width: 200px;
-      background: #010409;
-      border-right: 1px solid #21262d;
+      background: #1E1E1E;
+      border-right: 1px solid #3C3C3C;
       cursor: pointer;
       transition: background 120ms ease;
       flex-shrink: 0;
@@ -429,11 +467,11 @@
     }
 
     .tab:hover {
-      background: #0d1117;
+      background: #252526;
     }
 
     .tab.active {
-      background: #0d1117;
+      background: #252526;
     }
 
     .tab.active::after {
@@ -443,7 +481,7 @@
       left: 0;
       right: 0;
       height: 2px;
-      background: #7c83ff;
+      background: #007ACC;
     }
 
     .tab-icon {
@@ -453,7 +491,7 @@
 
     .tab-name {
       font-size: 12px;
-      color: #8b949e;
+      color: #858585;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -461,13 +499,13 @@
     }
 
     .tab.active .tab-name {
-      color: #c9d1d9;
+      color: #D4D4D4;
     }
 
     .tab-close {
       background: none;
       border: none;
-      color: #484f58;
+      color: #5A5A5A;
       cursor: pointer;
       padding: 2px;
       border-radius: 4px;
@@ -496,8 +534,8 @@
       display: flex;
       align-items: center;
       padding: 2px 12px;
-      background: #0d1117;
-      border-bottom: 1px solid #161b22;
+      background: #252526;
+      border-bottom: 1px solid #3C3C3C;
       flex-shrink: 0;
       min-height: 26px;
     }
@@ -505,7 +543,7 @@
     .editor-file-path {
       font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
       font-size: 11px;
-      color: #484f58;
+      color: #5A5A5A;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -521,8 +559,8 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      border-left: 1px solid #21262d;
-      background: #010409;
+      border-left: 1px solid #3C3C3C;
+      background: #252526;
     }
 
     /* Resize handles */
@@ -537,7 +575,7 @@
 
     .resize-handle:hover,
     .resize-handle.active {
-      background: #7c83ff;
+      background: #007ACC;
     }
 
     /* Mobile/small screen */
@@ -552,7 +590,7 @@
         min-height: 100px;
         max-height: 300px;
         border-right: none;
-        border-bottom: 1px solid #21262d;
+        border-bottom: 1px solid #3C3C3C;
       }
       #pane-editor {
         min-width: 0;
@@ -563,13 +601,175 @@
         height: 300px;
         min-height: 150px;
         border-left: none;
-        border-top: 1px solid #21262d;
+        border-top: 1px solid #3C3C3C;
       }
       .resize-handle {
         width: 100%;
         height: 3px;
         cursor: row-resize;
       }
+    }
+
+    /* ==========================================================================
+       VS Code Dark+ — Gradient approve / status badges / status bar
+       ========================================================================== */
+
+    /* Approve / Accept button — purple-to-red gradient */
+    .btn-accept {
+      background: linear-gradient(135deg, #8A2BE2, #FF6B6B) !important;
+      color: #fff !important;
+      border-color: transparent !important;
+      border: none !important;
+      font-weight: 700;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+
+    .btn-accept:hover {
+      opacity: 0.88;
+      transform: translateY(-1px);
+    }
+
+    /* Reject / Cancel button — dark gray VS Code style */
+    .btn-reject {
+      background: #3C3C3C !important;
+      color: #D4D4D4 !important;
+      border-color: #555 !important;
+      font-weight: 600;
+    }
+
+    .btn-reject:hover {
+      background: #4A4A4A !important;
+    }
+
+    /* Primary buttons — use accent blue */
+    .btn-primary {
+      background: #007ACC !important;
+      color: #fff !important;
+      border-color: #007ACC !important;
+    }
+
+    .btn-primary:hover {
+      background: #005A9E !important;
+    }
+
+    /* Status badges */
+    .badge-running,
+    .status-running {
+      background: #1E8A5A;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-awaiting,
+    .status-awaiting {
+      background: #895723;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Status bar (bottom) */
+    #status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 24px;
+      padding: 0 12px;
+      background: #2D2D30;
+      color: #858585;
+      font-size: 11px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      flex-shrink: 0;
+      border-top: 1px solid #3C3C3C;
+      user-select: none;
+    }
+
+    #status-bar .status-left,
+    #status-bar .status-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .branch-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #8A2BE2;
+      color: #fff;
+      padding: 1px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* Syntax highlighting — VS Code Dark+ */
+    .token-keyword  { color: #569CD6; }
+    .token-string   { color: #CE9178; }
+    .token-comment  { color: #6A9955; font-style: italic; }
+    .token-function { color: #DCDCAA; }
+    .token-number   { color: #B5CEA8; }
+    .token-type     { color: #4EC9B0; }
+    .token-operator { color: #D4D4D4; }
+    .token-variable { color: #9CDCFE; }
+
+    /* ---- VS Code-style Status Bar ---- */
+    #status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 24px;
+      padding: 0 8px;
+      background: #2D2D30;
+      border-top: 1px solid #3C3C3C;
+      flex-shrink: 0;
+      user-select: none;
+      font-size: 12px;
+      color: #D4D4D4;
+      -webkit-app-region: no-drag;
+    }
+
+    .status-bar-left,
+    .status-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: #858585;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0 4px;
+      border-radius: 2px;
+      transition: background 80ms ease;
+    }
+
+    .status-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #D4D4D4;
+    }
+
+    #status-agent {
+      color: #1E8A5A;
+      font-weight: 600;
+    }
+
+    #status-agent.active {
+      color: #895723;
     }
   </style>
 </head>
@@ -583,6 +783,30 @@
       <div id="titlebar-menu">
         <button class="titlebar-menu-item" id="btn-folder">File</button>
         <button class="titlebar-menu-item" id="btn-edit-menu">Edit</button>
+        <div class="view-dropdown" id="edit-dropdown">
+          <div class="view-dropdown-item" data-action="edit-undo">
+            <span>Undo</span>
+            <span class="shortcut-hint">Ctrl+Z</span>
+          </div>
+          <div class="view-dropdown-item" data-action="edit-redo">
+            <span>Redo</span>
+            <span class="shortcut-hint">Ctrl+Shift+Z</span>
+          </div>
+          <div class="view-dropdown-divider"></div>
+          <div class="view-dropdown-item" data-action="edit-find">
+            <span>Find</span>
+            <span class="shortcut-hint">Ctrl+F</span>
+          </div>
+          <div class="view-dropdown-item" data-action="edit-replace">
+            <span>Replace</span>
+            <span class="shortcut-hint">Ctrl+H</span>
+          </div>
+          <div class="view-dropdown-divider"></div>
+          <div class="view-dropdown-item" data-action="edit-format">
+            <span>Format Document</span>
+            <span class="shortcut-hint">Shift+Alt+F</span>
+          </div>
+        </div>
         <button class="titlebar-menu-item" id="btn-view-menu">View</button>
         <div class="view-dropdown" id="view-dropdown">
           <div class="view-dropdown-item" data-action="layout-ide">
@@ -661,7 +885,7 @@
         <div class="file-tree-header">
           <span>Explorer</span>
           <div style="display:flex;gap:2px;">
-            <button id="btn-debug-tree" title="Debug IPC" style="font-size:10px;padding:2px 6px;background:none;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:pointer;">?</button>
+            <button id="btn-debug-tree" title="Debug IPC" style="font-size:10px;padding:2px 6px;background:none;border:1px solid #3C3C3C;color:#5A5A5A;border-radius:3px;cursor:pointer;">?</button>
             <button id="btn-refresh-tree" title="Refresh">&#8635;</button>
           </div>
         </div>
@@ -679,14 +903,16 @@
         <div class="editor-container" id="editor-container"></div>
         <!-- Agent Activity Panel (bottom of editor pane) -->
         <div id="agent-activity-container"></div>
+        <!-- Integrated Terminal (bottom of editor pane) -->
+        <div id="terminal-panel" class="collapsed"></div>
       </div>
 
       <div class="resize-handle" id="resize-editor-chat"></div>
 
       <!-- Right: Chat -->
       <div id="pane-chat">
-        <div id="chat-internal-header" style="display:flex;align-items:center;justify-content:space-between;padding:4px 12px;background:#010409;border-bottom:1px solid #21262d;flex-shrink:0;min-height:36px;">
-          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#484f58;">Chat</span>
+        <div id="chat-internal-header" style="display:flex;align-items:center;justify-content:space-between;padding:4px 12px;background:#252526;border-bottom:1px solid #3C3C3C;flex-shrink:0;min-height:36px;">
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#5A5A5A;">Chat</span>
         </div>
         <main id="message-list">
           <div id="welcome-message" class="welcome">
@@ -812,6 +1038,26 @@
         </footer>
       </div>
     </div>
+
+    <!-- VS Code-style Status Bar -->
+    <div id="status-bar">
+      <div class="status-bar-left">
+        <span class="branch-indicator">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M11.93 8.5a4.002 4.002 0 01-7.86 0H1.5a.5.5 0 010-1h2.57a4.002 4.002 0 017.86 0h2.57a.5.5 0 010 1h-2.57zM8 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/></svg>
+          main
+        </span>
+        <span class="status-item" id="status-sync">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a6 6 0 00-6 6H0l2.5 3L5 8H3a5 5 0 0110 0h1a6 6 0 00-6-6zm0 12a6 6 0 006-6h-1a5 5 0 01-10 0H3a6 6 0 005 6z"/></svg>
+          0
+        </span>
+      </div>
+      <div class="status-bar-right">
+        <span class="status-item" id="status-line-col">Ln 1, Col 1</span>
+        <span class="status-item" id="status-encoding">UTF-8</span>
+        <span class="status-item" id="status-lang">TypeScript</span>
+        <span class="status-item" id="status-agent">Agent: Idle</span>
+      </div>
+    </div>
   </div>
 
   <!-- API key modal -->
@@ -821,7 +1067,7 @@
       <p>Choose a provider and enter your API key.</p>
       <div class="settings-group">
         <label>Provider</label>
-        <select id="api-key-provider" style="width:100%;padding:8px;background:#0d1117;color:#c9d1d9;border:1px solid #21262d;border-radius:6px;font-size:14px;">
+        <select id="api-key-provider" style="width:100%;padding:8px;background:#1E1E1E;color:#D4D4D4;border:1px solid #3C3C3C;border-radius:6px;font-size:14px;">
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="nvidia-nim">NVIDIA NIM (Free models!)</option>
           <option value="openrouter">OpenRouter (Multi-provider)</option>
@@ -857,13 +1103,13 @@
       </div>
       <div class="settings-group">
         <label>NVIDIA NIM API Key</label>
-        <p style="font-size:11px;color:#8b949e;margin-bottom:4px;">Free at <a href="https://build.nvidia.com" style="color:#7c83ff">build.nvidia.com</a> &mdash; 1000 credits/day</p>
+        <p style="font-size:11px;color:#858585;margin-bottom:4px;">Free at <a href="https://build.nvidia.com" style="color:#007ACC">build.nvidia.com</a> &mdash; 1000 credits/day</p>
         <input id="settings-nvidia-key" type="password" placeholder="nvapi-...">
         <button id="btn-save-nvidia-key" class="btn-small btn-primary">Save</button>
       </div>
       <div class="settings-group">
         <label>OpenRouter API Key</label>
-        <p style="font-size:11px;color:#8b949e;margin-bottom:4px;">Access Claude, GPT-4o, Gemini, Llama &amp; more via <a href="https://openrouter.ai/keys" style="color:#7c83ff">openrouter.ai</a></p>
+        <p style="font-size:11px;color:#858585;margin-bottom:4px;">Access Claude, GPT-4o, Gemini, Llama &amp; more via <a href="https://openrouter.ai/keys" style="color:#007ACC">openrouter.ai</a></p>
         <input id="settings-openrouter-key" type="password" placeholder="sk-or-...">
         <button id="btn-save-openrouter-key" class="btn-small btn-primary">Save</button>
       </div>
@@ -889,7 +1135,7 @@
       </div>
       <div class="settings-group">
         <label>Google Gemini API Key</label>
-        <p style="font-size:11px;color:#8b949e;margin-bottom:4px;">Get at <a href="https://aistudio.google.com/apikey" style="color:#7c83ff">aistudio.google.com</a></p>
+        <p style="font-size:11px;color:#858585;margin-bottom:4px;">Get at <a href="https://aistudio.google.com/apikey" style="color:#007ACC">aistudio.google.com</a></p>
         <input id="settings-gemini-key" type="password" placeholder="AIza...">
         <button id="btn-save-gemini-key" class="btn-small btn-primary">Save</button>
       </div>
@@ -900,7 +1146,7 @@
       </div>
       <div class="settings-group">
         <label>Ollama &amp; LM Studio</label>
-        <p style="font-size:11px;color:#8b949e;margin-bottom:4px;">Local providers — no API key needed. Just run <code>ollama serve</code> or open LM Studio on localhost:1234.</p>
+        <p style="font-size:11px;color:#858585;margin-bottom:4px;">Local providers — no API key needed. Just run <code>ollama serve</code> or open LM Studio on localhost:1234.</p>
       </div>
       <div class="modal-actions">
         <button id="btn-close-settings" class="btn-secondary">Close</button>
@@ -922,6 +1168,7 @@
   <script src="filetree/filetree.js"></script>
   <script src="editor/editor.js"></script>
   <script src="activity/activity.js"></script>
+  <script src="terminal/terminal.js"></script>
   <script src="chat/chat.js"></script>
 
   <!-- Layout coordination script -->
@@ -1031,17 +1278,39 @@
       });
     });
 
-    // Keyboard shortcuts for layout
+    // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       // Ctrl+B — toggle file tree
-      if (e.ctrlKey && e.key === 'b') {
+      if (e.ctrlKey && !e.shiftKey && e.key === 'b') {
         e.preventDefault();
         togglePane('pane-filetree');
       }
       // Ctrl+J — toggle chat panel
-      if (e.ctrlKey && e.key === 'j') {
+      if (e.ctrlKey && !e.shiftKey && e.key === 'j') {
         e.preventDefault();
         togglePane('pane-chat');
+      }
+      // Ctrl+Shift+A — toggle activity panel
+      if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        const container = document.getElementById('agent-activity-container');
+        if (container && window.activityPanel) {
+          window.activityPanel.isVisible = !window.activityPanel.isVisible;
+          container.classList.toggle('collapsed', !window.activityPanel.isVisible);
+          window.activityPanel.onToggle(window.activityPanel.isVisible);
+        }
+      }
+      // Ctrl+` — toggle terminal panel
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        if (window.kovixTerminal) {
+          window.kovixTerminal.toggle();
+        }
+      }
+      // Escape — close all dropdowns
+      if (e.key === 'Escape') {
+        viewDropdown.classList.remove('open');
+        if (editDropdown) editDropdown.classList.remove('open');
       }
     });
 
@@ -1166,31 +1435,70 @@
               }, 250);
             }
           },
+          onResize: (newHeight) => {
+            // Resize Monaco when activity panel is dragged
+            if (kovixEditor) {
+              setTimeout(() => {
+                if (kovixEditor.editor) kovixEditor.editor.layout();
+                if (kovixEditor.diffEditor) kovixEditor.diffEditor.layout();
+              }, 50);
+            }
+          },
         });
         window.activityPanel = activityPanel;
         console.log('[Layout] Agent Activity Panel initialized');
       }
 
-      // Forward agent events to activity panel
+      // Forward agent events to activity panel + status bar
       _api.onAgentEvent((event) => {
-        if (activityPanel) {
-          activityPanel.handleEvent(event);
-        }
+        if (activityPanel) activityPanel.handleEvent(event);
+        updateStatusBar(event);
       });
 
-      // Forward pipeline events to activity panel
+      // Forward pipeline events to activity panel + status bar
       _api.onPipelineEvent((event) => {
-        if (activityPanel) {
-          activityPanel.handleEvent(event);
-        }
+        if (activityPanel) activityPanel.handleEvent(event);
+        updateStatusBar(event);
       });
 
-      // Forward swarm events to activity panel
+      // Forward swarm events to activity panel + status bar
       _api.onSwarmEvent((event) => {
-        if (activityPanel) {
-          activityPanel.handleEvent(event);
-        }
+        if (activityPanel) activityPanel.handleEvent(event);
+        updateStatusBar(event);
       });
+
+      // ---- Edit menu dropdown ----
+      const btnEditMenu = document.getElementById('btn-edit-menu');
+      const editDropdown = document.getElementById('edit-dropdown');
+
+      if (btnEditMenu && editDropdown) {
+        btnEditMenu.addEventListener('click', (e) => {
+          e.stopPropagation();
+          viewDropdown.classList.remove('open');
+          editDropdown.classList.toggle('open');
+        });
+
+        document.addEventListener('click', () => {
+          editDropdown.classList.remove('open');
+        });
+
+        editDropdown.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const item = e.target.closest('.view-dropdown-item');
+          if (!item) return;
+          const action = item.dataset.action;
+          editDropdown.classList.remove('open');
+
+          // Forward editor actions to Monaco if available
+          if (kovixEditor && kovixEditor.editor) {
+            if (action === 'edit-undo') kovixEditor.editor.trigger('menu', 'undo');
+            else if (action === 'edit-redo') kovixEditor.editor.trigger('menu', 'redo');
+            else if (action === 'edit-find') kovixEditor.editor.trigger('menu', 'actions.find');
+            else if (action === 'edit-replace') kovixEditor.editor.trigger('menu', 'editor.action.startFindReplaceAction');
+            else if (action === 'edit-format') kovixEditor.editor.trigger('menu', 'editor.action.formatDocument');
+          }
+        });
+      }
 
       // Refresh tree button
       document.getElementById('btn-refresh-tree').addEventListener('click', () => {
@@ -1200,7 +1508,7 @@
       // Debug button — tests the IPC connection and shows results in the tree
       document.getElementById('btn-debug-tree').addEventListener('click', async () => {
         const container = document.getElementById('file-tree-container');
-        let debugHtml = '<div class="file-tree-empty" style="text-align:left;font-size:11px;padding:8px;color:#8b949e;">';
+        let debugHtml = '<div class="file-tree-empty" style="text-align:left;font-size:11px;padding:8px;color:#858585;">';
         debugHtml += '<b>IPC Debug</b><br>';
         debugHtml += '_api: ' + (typeof _api) + '<br>';
         debugHtml += '_api.listDirectory: ' + (typeof (_api && _api.listDirectory)) + '<br>';
@@ -1251,6 +1559,78 @@
 
       // Theme toggle
       setupThemeToggle();
+
+      // Initialize Terminal
+      const terminalPanel = document.getElementById('terminal-panel');
+      if (terminalPanel && window.KovixTerminal) {
+        const kovixTerminal = new KovixTerminal(terminalPanel, _api, {
+          onToggle: (visible) => {
+            // Resize Monaco when terminal toggles
+            if (kovixEditor) {
+              setTimeout(() => {
+                if (kovixEditor.editor) kovixEditor.editor.layout();
+                if (kovixEditor.diffEditor) kovixEditor.diffEditor.layout();
+              }, 250);
+            }
+          },
+          onResize: (newHeight) => {
+            // Resize Monaco when terminal is dragged
+            if (kovixEditor) {
+              setTimeout(() => {
+                if (kovixEditor.editor) kovixEditor.editor.layout();
+                if (kovixEditor.diffEditor) kovixEditor.diffEditor.layout();
+              }, 50);
+            }
+          },
+        });
+        kovixTerminal.setupResizeHandle();
+        window.kovixTerminal = kovixTerminal;
+        console.log('[Layout] Terminal panel initialized');
+      }
+    }
+
+    // ---- Status bar updates ----
+
+    function updateStatusBar(event) {
+      const statusAgent = document.getElementById('status-agent');
+      const statusLang = document.getElementById('status-lang');
+      const statusLineCol = document.getElementById('status-line-col');
+
+      if (!event) return;
+
+      // Update agent status
+      if (statusAgent) {
+        if (event.type === 'thinking' || event.type === 'tool_start' || event.type === 'tool_executing') {
+          statusAgent.textContent = 'Agent: Running';
+          statusAgent.className = 'status-item active';
+        } else if (event.type === 'complete') {
+          statusAgent.textContent = 'Agent: Complete';
+          statusAgent.className = 'status-item';
+        } else if (event.type === 'error') {
+          statusAgent.textContent = 'Agent: Error';
+          statusAgent.className = 'status-item active';
+        } else if (event.type === 'pipeline') {
+          if (event.phase === 'execute') {
+            statusAgent.textContent = 'Agent: Executing';
+            statusAgent.className = 'status-item active';
+          } else if (event.phase === 'plan') {
+            statusAgent.textContent = 'Agent: Planning';
+            statusAgent.className = 'status-item active';
+          }
+        }
+      }
+
+      // Update language indicator from file events
+      if (statusLang && event.filePath) {
+        const ext = event.filePath.split('.').pop();
+        const langMap = {
+          'ts': 'TypeScript', 'tsx': 'TypeScript React', 'js': 'JavaScript',
+          'jsx': 'JavaScript React', 'py': 'Python', 'rs': 'Rust',
+          'go': 'Go', 'java': 'Java', 'css': 'CSS', 'html': 'HTML',
+          'json': 'JSON', 'md': 'Markdown', 'yaml': 'YAML', 'yml': 'YAML',
+        };
+        if (langMap[ext]) statusLang.textContent = langMap[ext];
+      }
     }
 
     // ---- Theme toggle ----

@@ -20,6 +20,7 @@
 
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import * as path from 'path';
+import * as pty from 'node-pty';
 import { initAppState, getAppState, isAppStateInitialized } from '../src/platform/appState';
 import { ConstructAIService } from '../src/llm/aiService';
 import { pendingChangesService } from '../src/diff/pendingChangesService';
@@ -46,6 +47,10 @@ let mainWindow: BrowserWindow | null = null;
 let aiService: ConstructAIService | undefined;
 let mcpManager: McpManager | undefined;
 let _activeAbortController: AbortController | null = null;
+
+// ---- Terminal PTY instances ----
+const _ptyInstances: Map<string, pty.IPty> = new Map();
+let _ptyCounter = 0;
 
 // ---------------------------------------------------------------------------
 // App lifecycle
@@ -926,6 +931,65 @@ function registerIpcHandlers(): void {
         // ---- Command confirmation ----
         ipcMain.handle('prompt:confirmResponse', async (_event, command: string, approved: boolean) => {
                 resolveCommandConfirmation(command, approved);
+        });
+
+        // ---- Terminal (node-pty) ----
+        ipcMain.handle('terminal:create', async (_event, options?: { cwd?: string; shell?: string }) => {
+                const id = `pty-${++_ptyCounter}`;
+                try {
+                        const shell = options?.shell || (process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash');
+                        const cwd = options?.cwd || (isAppStateInitialized() ? getAppState().workspaceRoots.roots[0] : process.env.HOME || process.cwd());
+                        const ptyProcess = pty.spawn(shell, [], {
+                                name: 'xterm-256color',
+                                cols: 80,
+                                rows: 24,
+                                cwd,
+                                env: { ...process.env as Record<string, string> },
+                        });
+                        _ptyInstances.set(id, ptyProcess);
+
+                        ptyProcess.onData((data: string) => {
+                                sendToRenderer('terminal:data', { id, data });
+                        });
+                        ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
+                                sendToRenderer('terminal:exit', { id, exitCode });
+                                _ptyInstances.delete(id);
+                        });
+
+                        logger.info(`[Terminal] Created PTY ${id} (shell=${shell}, cwd=${cwd})`);
+                        return { id, pid: ptyProcess.pid };
+                } catch (error) {
+                        const msg = error instanceof Error ? error.message : String(error);
+                        logger.error(`[Terminal] Failed to create PTY: ${msg}`);
+                        return { error: msg };
+                }
+        });
+
+        ipcMain.handle('terminal:write', async (_event, id: string, data: string) => {
+                const ptyProcess = _ptyInstances.get(id);
+                if (!ptyProcess) return { error: 'PTY not found' };
+                ptyProcess.write(data);
+                return { success: true };
+        });
+
+        ipcMain.handle('terminal:resize', async (_event, id: string, cols: number, rows: number) => {
+                const ptyProcess = _ptyInstances.get(id);
+                if (!ptyProcess) return { error: 'PTY not found' };
+                try {
+                        ptyProcess.resize(cols, rows);
+                        return { success: true };
+                } catch {
+                        return { error: 'resize failed' };
+                }
+        });
+
+        ipcMain.handle('terminal:kill', async (_event, id: string) => {
+                const ptyProcess = _ptyInstances.get(id);
+                if (!ptyProcess) return { error: 'PTY not found' };
+                ptyProcess.kill();
+                _ptyInstances.delete(id);
+                logger.info(`[Terminal] Killed PTY ${id}`);
+                return { success: true };
         });
 }
 

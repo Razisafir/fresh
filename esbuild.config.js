@@ -24,6 +24,7 @@ const commonOptions = {
   external: [
     'electron',
     'hnswlib-node',
+    'node-pty',
     // Node built-ins that shouldn't be bundled
     'child_process',
     'crypto',

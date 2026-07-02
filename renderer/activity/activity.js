@@ -43,22 +43,27 @@ class AgentActivityPanel {
    * @param {object} options
    * @param {function} options.onFileClick - Called when user clicks a file path
    * @param {function} options.onToggle - Called when panel visibility changes
+   * @param {function} options.onResize - Called when panel height changes
    */
   constructor(container, api, options = {}) {
     this.container = container;
     this.api = api;
     this.onFileClick = options.onFileClick || (() => {});
     this.onToggle = options.onToggle || (() => {});
+    this.onResize = options.onResize || (() => {});
 
     this.entries = [];       // All activity entries
     this.maxEntries = 500;   // Limit to prevent memory bloat
     this.isVisible = true;
     this.isPaused = false;   // Pause auto-scroll
     this.filterLevel = 'all'; // 'all' | 'important' | 'files'
+    this._searchQuery = '';   // Search filter
 
     // Current streaming state
     this._currentToolStart = null;
     this._streamingEntry = null;
+    this._thinkingStartTime = null;
+    this._toolStartTime = null;
 
     this._buildUI();
   }
@@ -70,6 +75,13 @@ class AgentActivityPanel {
     this.container.innerHTML = '';
     this.container.className = 'agent-activity-panel';
 
+    // Resize handle (top of panel)
+    this.resizeHandle = document.createElement('div');
+    this.resizeHandle.className = 'activity-resize-handle';
+    this.resizeHandle.title = 'Drag to resize';
+    this.container.appendChild(this.resizeHandle);
+    this._setupResize();
+
     // Header bar
     const header = document.createElement('div');
     header.className = 'activity-header';
@@ -80,6 +92,17 @@ class AgentActivityPanel {
 
     const controls = document.createElement('div');
     controls.className = 'activity-controls';
+
+    // Search input
+    this.searchInput = document.createElement('input');
+    this.searchInput.className = 'activity-search';
+    this.searchInput.type = 'text';
+    this.searchInput.placeholder = 'Search...';
+    this.searchInput.addEventListener('input', () => {
+      this._searchQuery = this.searchInput.value.toLowerCase().trim();
+      this._render();
+    });
+    controls.appendChild(this.searchInput);
 
     // Filter buttons
     const filterBtns = ['all', 'important', 'files'].map(level => {
@@ -116,6 +139,8 @@ class AgentActivityPanel {
       this.entries = [];
       this._currentToolStart = null;
       this._streamingEntry = null;
+      this._thinkingStartTime = null;
+      this._toolStartTime = null;
       this._render();
     });
 
@@ -147,14 +172,65 @@ class AgentActivityPanel {
     // Empty state
     this.emptyEl = document.createElement('div');
     this.emptyEl.className = 'activity-empty';
-    this.emptyEl.textContent = 'Agent is idle. Send a task to see activity here.';
+    this.emptyEl.innerHTML = '<span class="activity-empty-icon">\u{1F916}</span><span>Agent is idle. Send a task to see activity here.</span>';
     this.listEl.appendChild(this.emptyEl);
+
+    // Scroll-to-bottom button (appears when scrolled up)
+    this.scrollBtn = document.createElement('button');
+    this.scrollBtn.className = 'activity-scroll-btn hidden';
+    this.scrollBtn.textContent = '\u25BC';
+    this.scrollBtn.title = 'Scroll to bottom';
+    this.scrollBtn.addEventListener('click', () => {
+      this.listEl.scrollTop = this.listEl.scrollHeight;
+      this.scrollBtn.classList.add('hidden');
+    });
+    this.container.appendChild(this.scrollBtn);
+
+    // Track scroll position for scroll-to-bottom button
+    this.listEl.addEventListener('scroll', () => {
+      const atBottom = this.listEl.scrollHeight - this.listEl.scrollTop - this.listEl.clientHeight < 40;
+      this.scrollBtn.classList.toggle('hidden', atBottom);
+    });
 
     // Status bar at bottom
     this.statusBar = document.createElement('div');
     this.statusBar.className = 'activity-status-bar';
-    this.statusBar.innerHTML = '<span class="status-idle">\u{1F7E2} Idle</span>';
+    this.statusBar.innerHTML = '<span class="status-idle">\u{1F7E2} Idle</span><span class="status-count"></span>';
     this.container.appendChild(this.statusBar);
+  }
+
+  /**
+   * Set up vertical resize for the activity panel.
+   */
+  _setupResize() {
+    let startY = 0;
+    let startHeight = 0;
+    const MIN_HEIGHT = 60;
+    const MAX_HEIGHT = 600;
+
+    this.resizeHandle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startY = e.clientY;
+      startHeight = this.container.offsetHeight;
+      this.resizeHandle.classList.add('active');
+
+      const onMouseMove = (e) => {
+        const delta = startY - e.clientY; // Drag up = increase height
+        let newHeight = startHeight + delta;
+        newHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, newHeight));
+        this.container.style.height = newHeight + 'px';
+        this.onResize(newHeight);
+      };
+
+      const onMouseUp = () => {
+        this.resizeHandle.classList.remove('active');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
   }
 
   /**
@@ -167,16 +243,24 @@ class AgentActivityPanel {
     // Special handling for streaming tokens - accumulate into existing entry
     if (type === 'thinking') {
       if (!this._streamingEntry) {
+        this._thinkingStartTime = Date.now();
         this._streamingEntry = this._addEntry({
           type: 'thinking',
           icon: config.icon,
-          label: 'Thinking',
+          label: 'Thinking...',
           color: config.color,
           content: '',
           collapsible: true,
           defaultCollapsed: true,
           timestamp: Date.now(),
         });
+      } else {
+        // Update thinking duration
+        const elapsed = Date.now() - (this._thinkingStartTime || this._streamingEntry.timestamp);
+        if (elapsed > 1000) {
+          this._streamingEntry.label = 'Thinking... (' + (elapsed / 1000).toFixed(1) + 's)';
+          this._updateEntryDOM(this._streamingEntry);
+        }
       }
       this._updateStatus('\u{1F4AD} Thinking...');
       return;
@@ -203,12 +287,20 @@ class AgentActivityPanel {
     }
 
     // Non-streaming event: end any active streaming
+    if (this._streamingEntry && this._streamingEntry.type === 'thinking') {
+      const elapsed = Date.now() - (this._thinkingStartTime || this._streamingEntry.timestamp);
+      this._streamingEntry.label = 'Thought for ' + (elapsed / 1000).toFixed(1) + 's';
+      this._streamingEntry.icon = '\u{1F4AD}';
+      this._updateEntryDOM(this._streamingEntry);
+    }
     this._streamingEntry = null;
+    this._thinkingStartTime = null;
 
     // Special handling for tool events - merge start + result
     if (type === 'tool_start') {
       const toolInput = event.toolInput;
       const inputStr = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput, null, 2);
+      this._toolStartTime = Date.now();
 
       this._currentToolStart = this._addEntry({
         type: 'tool_start',
@@ -235,12 +327,17 @@ class AgentActivityPanel {
     if (type === 'tool_result') {
       if (this._currentToolStart) {
         // Merge with tool_start entry
+        const duration = this._toolStartTime ? Date.now() - this._toolStartTime : null;
         this._currentToolStart.status = event.success ? 'success' : 'error';
         this._currentToolStart.result = event.result;
         this._currentToolStart.color = event.success ? '#3fb950' : '#f85149';
         this._currentToolStart.icon = event.success ? '\u2705' : '\u274C';
+        if (duration && duration > 100) {
+          this._currentToolStart.label = this._formatToolName(this._currentToolStart.toolName) + ' (' + (duration / 1000).toFixed(1) + 's)';
+        }
         this._updateEntryDOM(this._currentToolStart);
         this._currentToolStart = null;
+        this._toolStartTime = null;
       } else {
         this._addEntry({
           type: 'tool_result',
@@ -441,7 +538,8 @@ class AgentActivityPanel {
 
     // Trim old entries
     while (this.entries.length > this.maxEntries) {
-      this.entries.shift();
+      const removed = this.entries.shift();
+      if (removed._el) removed._el.remove();
     }
 
     // Hide empty state
@@ -452,6 +550,7 @@ class AgentActivityPanel {
 
     this._renderEntry(entry);
     this._autoScroll();
+    this._updateEntryCount();
     return entry;
   }
 
@@ -661,21 +760,29 @@ class AgentActivityPanel {
   }
 
   /**
-   * Get entries filtered by current level.
+   * Get entries filtered by current level and search query.
    */
   _getFilteredEntries() {
-    if (this.filterLevel === 'all') return this.entries;
+    let filtered = this.entries;
     if (this.filterLevel === 'important') {
-      return this.entries.filter(e =>
+      filtered = filtered.filter(e =>
         ['tool_start', 'tool_result', 'file_written', 'complete', 'error', 'plan_ready', 'milestone', 'pipeline', 'swarm'].includes(e.type)
       );
-    }
-    if (this.filterLevel === 'files') {
-      return this.entries.filter(e =>
+    } else if (this.filterLevel === 'files') {
+      filtered = filtered.filter(e =>
         ['file_written', 'file_read'].includes(e.type) || e.filePath
       );
     }
-    return this.entries;
+    // Apply search filter
+    if (this._searchQuery) {
+      filtered = filtered.filter(e =>
+        (e.label && e.label.toLowerCase().includes(this._searchQuery)) ||
+        (e.content && String(e.content).toLowerCase().includes(this._searchQuery)) ||
+        (e.filePath && e.filePath.toLowerCase().includes(this._searchQuery)) ||
+        (e.toolName && e.toolName.toLowerCase().includes(this._searchQuery))
+      );
+    }
+    return filtered;
   }
 
   /**
@@ -685,8 +792,28 @@ class AgentActivityPanel {
     if (!this.statusBar) return;
     const isIdle = text.includes('Idle');
     this.statusBar.innerHTML = isIdle
-      ? '<span class="status-idle">\u{1F7E2} ' + text.replace('\u{1F7E2} ', '') + '</span>'
-      : '<span class="status-active">' + text + '</span>';
+      ? '<span class="status-idle">\u{1F7E2} ' + text.replace('\u{1F7E2} ', '') + '</span>' + this._entryCountHTML()
+      : '<span class="status-active">' + text + '</span>' + this._entryCountHTML();
+  }
+
+  /**
+   * Get HTML for entry count in status bar.
+   */
+  _entryCountHTML() {
+    const count = this.entries.length;
+    if (count === 0) return '';
+    return '<span class="status-count">' + count + ' event' + (count !== 1 ? 's' : '') + '</span>';
+  }
+
+  /**
+   * Update entry count display.
+   */
+  _updateEntryCount() {
+    const countEl = this.statusBar && this.statusBar.querySelector('.status-count');
+    if (countEl) {
+      const count = this.entries.length;
+      countEl.textContent = count + ' event' + (count !== 1 ? 's' : '');
+    }
   }
 
   /**
@@ -767,7 +894,7 @@ class AgentActivityPanel {
   _truncateContent(content, maxLen) {
     if (!content) return '';
     if (content.length <= maxLen) return content;
-    return content.slice(0, maxLen) + '\n... (truncated)';
+    return content.slice(0, maxLen) + '\n... (' + (content.length - maxLen) + ' more chars)';
   }
 
   _formatTime(ts) {
