@@ -649,7 +649,10 @@
       <div id="pane-filetree">
         <div class="file-tree-header">
           <span>Explorer</span>
-          <button id="btn-refresh-tree" title="Refresh">&#8635;</button>
+          <div style="display:flex;gap:2px;">
+            <button id="btn-debug-tree" title="Debug IPC" style="font-size:10px;padding:2px 6px;background:none;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:pointer;">?</button>
+            <button id="btn-refresh-tree" title="Refresh">&#8635;</button>
+          </div>
         </div>
         <div id="file-tree-container" class="file-tree-container"></div>
       </div>
@@ -893,19 +896,21 @@
      * Layout B coordinator — wires file tree, editor, tabs, and chat together.
      */
 
-    // api is already declared by chat.js — reuse it.
-    // DO NOT redeclare with const/let/var.
+    // Grab the API — prefer the one from chat.js if it's in scope,
+    // but also fall back to the direct window reference.
+    // (const from another <script> may not be visible in all environments)
+    const _api = (typeof api !== 'undefined') ? api : window.__kovix_api;
 
     // ---- Window controls (frameless title bar) ----
 
     document.getElementById('btn-window-minimize').addEventListener('click', () => {
-      api.windowMinimize();
+      _api.windowMinimize();
     });
     document.getElementById('btn-window-maximize').addEventListener('click', async () => {
-      await api.windowMaximize();
+      await _api.windowMaximize();
     });
     document.getElementById('btn-window-close').addEventListener('click', () => {
-      api.windowClose();
+      _api.windowClose();
     });
 
     // ---- File menu is handled by chat.js btnFolder listener ----
@@ -973,8 +978,8 @@
       }
 
       // Persist to main process
-      if (api && api.setConfig) {
-        api.setConfig('uiMode', mode);
+      if (_api && _api.setConfig) {
+        _api.setConfig('uiMode', mode);
       }
     }
 
@@ -1030,17 +1035,22 @@
 
     async function initLayout() {
       console.log('[Layout] initLayout() starting...');
+      console.log('[Layout] _api available:', !!_api, 'keys:', _api ? Object.keys(_api).join(',') : 'NONE');
 
       // Initialize file tree
       const treeContainer = document.getElementById('file-tree-container');
       if (!treeContainer) {
         console.error('[Layout] file-tree-container not found!');
+        return;
       }
-      fileTree = new KovixFileTree(treeContainer, api, {
+      fileTree = new KovixFileTree(treeContainer, _api, {
         onFileSelect: (filePath) => handleFileSelect(filePath),
       });
       window.fileTree = fileTree;
-      console.log('[Layout] fileTree created');
+      console.log('[Layout] fileTree created, api.listDirectory available:', !!(_api && _api.listDirectory));
+
+      // Show a visible diagnostic in the tree container while loading
+      treeContainer.innerHTML = '<div class="file-tree-empty">Loading workspace...</div>';
 
       // Load workspace into tree — use workspaceRoots() for a direct answer,
       // fall back to getAppState(), and retry if main process isn't ready yet.
@@ -1048,21 +1058,24 @@
         let roots = null;
         // Try the direct workspaceRoots IPC first
         try {
-          roots = await api.workspaceRoots();
-        } catch { /* not available */ }
+          roots = await _api.workspaceRoots();
+          console.log('[Layout] workspaceRoots() returned:', roots);
+        } catch (e) { console.warn('[Layout] workspaceRoots() failed:', e); }
 
         // Fallback to getAppState()
         if (!roots || roots.length === 0) {
-          const appState = await api.getAppState();
+          const appState = await _api.getAppState();
+          console.log('[Layout] getAppState() returned:', appState ? Object.keys(appState).join(',') : 'null');
           if (appState && appState.workspaceRoots) {
             roots = appState.workspaceRoots;
           }
         }
 
         // Retry once after a short delay if still empty (race condition guard)
-        if ((!roots || roots.length === 0) && api.workspaceRoots) {
+        if ((!roots || roots.length === 0) && _api.workspaceRoots) {
+          treeContainer.innerHTML = '<div class="file-tree-empty">Waiting for workspace...</div>';
           await new Promise(r => setTimeout(r, 500));
-          try { roots = await api.workspaceRoots(); } catch { /* */ }
+          try { roots = await _api.workspaceRoots(); console.log('[Layout] retry workspaceRoots():', roots); } catch { /* */ }
         }
 
         if (roots && roots.length > 0) {
@@ -1070,15 +1083,17 @@
           await fileTree.setWorkspaceRoot(roots[0]);
         } else {
           console.log('[Layout] No workspace roots set. Use File > Open Folder to set one.');
+          treeContainer.innerHTML = '<div class="file-tree-empty">Open a folder to see files</div>';
         }
       } catch (err) {
         console.error('[Layout] Failed to load workspace roots:', err);
+        treeContainer.innerHTML = '<div class="file-tree-empty" style="color:#f85149">Error: ' + (err instanceof Error ? err.message : String(err)) + '</div>';
       }
 
       // Initialize Monaco editor
       const editorContainer = document.getElementById('editor-container');
       const editorHeader = document.getElementById('editor-header');
-      kovixEditor = new KovixEditor(editorContainer, editorHeader, api, {
+      kovixEditor = new KovixEditor(editorContainer, editorHeader, _api, {
         onAccept: (filePath) => handleChangeResolved(filePath),
         onReject: (filePath) => handleChangeResolved(filePath),
         onFileOpen: (filePath) => openTab(filePath),
@@ -1095,6 +1110,40 @@
         if (fileTree.workspaceRoot) fileTree.refresh();
       });
 
+      // Debug button — tests the IPC connection and shows results in the tree
+      document.getElementById('btn-debug-tree').addEventListener('click', async () => {
+        const container = document.getElementById('file-tree-container');
+        let debugHtml = '<div class="file-tree-empty" style="text-align:left;font-size:11px;padding:8px;color:#8b949e;">';
+        debugHtml += '<b>IPC Debug</b><br>';
+        debugHtml += '_api: ' + (typeof _api) + '<br>';
+        debugHtml += '_api.listDirectory: ' + (typeof (_api && _api.listDirectory)) + '<br>';
+        debugHtml += '_api.workspaceRoots: ' + (typeof (_api && _api.workspaceRoots)) + '<br>';
+        debugHtml += 'window.fileTree: ' + (window.fileTree ? 'exists' : 'null') + '<br>';
+        if (window.fileTree && window.fileTree.workspaceRoot) {
+          debugHtml += 'workspaceRoot: ' + window.fileTree.workspaceRoot + '<br>';
+        }
+        try {
+          const roots = await _api.workspaceRoots();
+          debugHtml += 'workspaceRoots(): ' + JSON.stringify(roots) + '<br>';
+        } catch (e) {
+          debugHtml += 'workspaceRoots() error: ' + (e instanceof Error ? e.message : String(e)) + '<br>';
+        }
+        if (window.fileTree && window.fileTree.workspaceRoot) {
+          try {
+            const result = await _api.listDirectory(window.fileTree.workspaceRoot);
+            debugHtml += 'listDirectory: entries=' + (result.entries ? result.entries.length : 'null');
+            debugHtml += ', error=' + (result.error || 'none') + '<br>';
+            if (result.entries && result.entries.length > 0) {
+              debugHtml += 'first 3: ' + JSON.stringify(result.entries.slice(0, 3)) + '<br>';
+            }
+          } catch (e) {
+            debugHtml += 'listDirectory error: ' + (e instanceof Error ? e.message : String(e)) + '<br>';
+          }
+        }
+        debugHtml += '</div>';
+        container.innerHTML = debugHtml;
+      });
+
       // File watcher events — refresh tree when files change on disk
       // Debounced to avoid excessive refreshes during bulk operations
       let _treeRefreshTimer = null;
@@ -1103,9 +1152,9 @@
         if (_treeRefreshTimer) clearTimeout(_treeRefreshTimer);
         _treeRefreshTimer = setTimeout(() => { fileTree.refresh(); }, 500);
       }
-      api.onFileChanged(debouncedTreeRefresh);
-      api.onFileCreated(debouncedTreeRefresh);
-      api.onFileDeleted(debouncedTreeRefresh);
+      _api.onFileChanged(debouncedTreeRefresh);
+      _api.onFileCreated(debouncedTreeRefresh);
+      _api.onFileDeleted(debouncedTreeRefresh);
 
       // Resize handles
       setupResizeHandles();
@@ -1266,7 +1315,7 @@
 
     async function handleChangeResolved(filePath) {
       if (fileTree) {
-        const snapshot = await api.getPendingSnapshot();
+        const snapshot = await _api.getPendingSnapshot();
         const paths = (snapshot || []).map(e => e.filePath);
         fileTree.setPendingPaths(paths);
       }
@@ -1278,7 +1327,7 @@
     // ---- Pending changes sync ----
 
     function setupPendingChangesSync() {
-      api.onPendingChanged((entries) => {
+      _api.onPendingChanged((entries) => {
         if (!Array.isArray(entries)) return;
         if (fileTree) {
           const paths = entries.map(e => e.filePath);
