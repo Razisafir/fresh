@@ -70,6 +70,17 @@ describe('workspaceGuard (SEC-4 path traversal defence)', () => {
                         const evil = process.platform === 'win32' ? 'C:\\workspace-evil\\file' : '/workspace-evil/file';
                         expect(() => assertWithinWorkspace(evil, root)).to.throw(/outside workspace/);
                 });
+
+                it('allows Windows paths with forward slashes inside workspace (Windows fix)', function() {
+                        if (process.platform !== 'win32') this.skip();
+                        // LLMs often generate C:/Users/... instead of C:\Users\...
+                        expect(() => assertWithinWorkspace('C:/workspace/src/file.ts', root)).to.not.throw();
+                });
+
+                it('allows case-insensitive path matching on Windows', function() {
+                        if (process.platform !== 'win32') this.skip();
+                        expect(() => assertWithinWorkspace('C:\\Workspace\\SRC\\file.ts', root)).to.not.throw();
+                });
         });
 
         describe('assertWithinWorkspace() — multi-root workspace (IWorkspaceRootsProvider)', () => {

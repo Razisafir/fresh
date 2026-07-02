@@ -107,6 +107,16 @@ Guidelines:
 - If task requires installing dependencies, do it
 - Always think about what could go wrong and handle it
 
+Available tools:
+- read_file: Read the contents of a file
+- write_file: Write content to a file (creates or overwrites)
+- edit_file: Edit a specific part of a file (search-and-replace style)
+- list_directory: List files and directories in a path
+- create_directory: Create a directory (including parent directories)
+- run_command: Execute a shell command
+- search_code: Search for text patterns across files in the workspace
+- web_fetch: Fetch content from a URL
+
 Common Failures table (do not reproduce these patterns):
   | Claim                  | Requires                                  | Not Sufficient                  |
   |------------------------|-------------------------------------------|---------------------------------|
@@ -178,7 +188,17 @@ export function buildChatSystemPrompt(options: IBuildChatPromptOptions): string 
 Working directory: ${workspacePath}
 Current date: ${date}
 
-You have access to tools for reading, writing, and editing files, running commands, and searching code. Use them proactively when the user's request requires file operations or command execution.
+You have access to the following tools:
+- read_file: Read the contents of a file
+- write_file: Write content to a file (creates or overwrites)
+- edit_file: Edit a specific part of a file (search-and-replace style)
+- list_directory: List files and directories in a path
+- create_directory: Create a directory (including parent directories)
+- run_command: Execute a shell command
+- search_code: Search for text patterns across files in the workspace
+- web_fetch: Fetch content from a URL
+
+Use these tools proactively when the user's request requires file operations or command execution.
 
 Guidelines:
 - Be helpful, concise, and accurate

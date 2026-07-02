@@ -57,8 +57,9 @@ export function assertWithinWorkspace(
         workspaceRoot?: string | IWorkspaceRootsProvider,
 ): void {
         // Reject path traversal attempts (e.g., ../../../etc/passwd)
+        // Normalize both forward and backward slashes for cross-platform safety.
         const normalized = path.normalize(filePath);
-        if (normalized.includes('..')) {
+        if (normalized.includes('..') || filePath.includes('..')) {
                 throw new Error(`Path traversal not allowed: "${filePath}"`);
         }
 
@@ -87,7 +88,12 @@ export function assertWithinWorkspace(
                         const resolved = path.isAbsolute(filePath)
                                 ? path.resolve(filePath)
                                 : path.resolve(root, filePath);
-                        if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+                        // Windows fix: normalize separators before comparison.
+                        // LLMs may generate forward slashes (C:/Users/...) but
+                        // path.resolve uses backslashes on Windows.
+                        const normResolved = resolved.split(path.sep).join('/').toLowerCase();
+                        const normRoot = root.split(path.sep).join('/').toLowerCase();
+                        if (!normResolved.startsWith(normRoot + '/') && normResolved !== normRoot) {
                                 throw new Error(`Security: path "${resolved}" is outside workspace "${root}"`);
                         }
                         return;
@@ -104,7 +110,10 @@ export function assertWithinWorkspace(
                         const resolved = path.isAbsolute(filePath)
                                 ? path.resolve(filePath)
                                 : path.resolve(root, filePath);
-                        if (resolved === root || resolved.startsWith(root + path.sep)) {
+                        // Windows fix: normalize separators before comparison.
+                        const normResolved = resolved.split(path.sep).join('/').toLowerCase();
+                        const normRoot = root.split(path.sep).join('/').toLowerCase();
+                        if (normResolved === normRoot || normResolved.startsWith(normRoot + '/')) {
                                 return;
                         }
                 }

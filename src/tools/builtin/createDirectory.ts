@@ -58,9 +58,9 @@ export const executeCreateDirectory: ToolExecuteFn = async (input: Record<string
         const workspaceRoot = roots.length > 0 ? roots[0] : process.cwd();
         const absolutePath = path.isAbsolute(rawPath) ? rawPath : path.join(workspaceRoot, rawPath);
 
-        // SEC-4: assert within workspace
+        // SEC-4: assert within workspace (pass workspace roots provider like all other tools)
         try {
-                assertWithinWorkspace(absolutePath);
+                assertWithinWorkspace(absolutePath, getWorkspaceRootsProvider());
         } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : String(err);
                 logger.warn(`[create_directory] Workspace guard rejected: ${msg}`);
