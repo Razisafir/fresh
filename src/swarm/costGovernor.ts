@@ -25,105 +25,134 @@ import { logger } from '../util/logger';
 // ---------------------------------------------------------------------------
 
 export interface ICreditSystemConfig {
-	/** Total credits allocated for this session. Default: 500. */
-	totalCredits: number;
-	/** Whether the credit system is enabled. Default: true. */
-	enabled: boolean;
+        /** Total credits allocated for this session. Default: 500. */
+        totalCredits: number;
+        /** Whether the credit system is enabled. Default: true. */
+        enabled: boolean;
 }
 
 const DEFAULT_CREDIT_CONFIG: ICreditSystemConfig = {
-	totalCredits: 500,
-	enabled: true,
+        totalCredits: 500,
+        enabled: true,
 };
 
 export class CreditSystem implements ICreditSystem {
-	private _remaining: number;
-	private readonly _config: ICreditSystemConfig;
-	private readonly _log: Array<{ timestamp: number; amount: number; actionType: CreditActionType; metadata?: Record<string, string> }> = [];
+        private _remaining: number;
+        private readonly _config: ICreditSystemConfig;
+        private readonly _log: Array<{ timestamp: number; amount: number; actionType: CreditActionType; metadata?: Record<string, string> }> = [];
 
-	constructor(config?: Partial<ICreditSystemConfig>) {
-		this._config = { ...DEFAULT_CREDIT_CONFIG, ...config };
-		this._remaining = this._config.totalCredits;
-	}
+        constructor(config?: Partial<ICreditSystemConfig>) {
+                this._config = { ...DEFAULT_CREDIT_CONFIG, ...config };
+                this._remaining = this._config.totalCredits;
+        }
 
-	getCreditsRemaining(): number {
-		return this._remaining;
-	}
+        getCreditsRemaining(): number {
+                return this._remaining;
+        }
 
-	getTotalCredits(): number {
-		return this._config.totalCredits;
-	}
+        getCreditsUsed(): number {
+                return this._config.totalCredits - this._remaining;
+        }
 
-	isEnabled(): boolean {
-		return this._config.enabled;
-	}
+        getTotalCredits(): number {
+                return this._config.totalCredits;
+        }
 
-	/**
-	 * Consume credits for an action.
-	 * @returns true if credits were consumed, false if insufficient.
-	 */
-	consumeCredits(
-		amount: number,
-		actionType: CreditActionType,
-		metadata?: { agentType?: string; sessionId?: string | undefined; description?: string },
-	): boolean {
-		if (!this._config.enabled) return true; // No limit when disabled
-		if (this._remaining < amount) {
-			logger.warn(`[CreditSystem] Insufficient credits: ${this._remaining} remaining, ${amount} requested for ${actionType}`);
-			return false;
-		}
-		this._remaining -= amount;
-		this._log.push({
-			timestamp: Date.now(),
-			amount,
-			actionType,
-			metadata: metadata as Record<string, string> | undefined,
-		});
+        isEnabled(): boolean {
+                return this._config.enabled;
+        }
 
-		// Log when credits are getting low
-		if (this._remaining <= this._config.totalCredits * 0.2) {
-			logger.info(`[CreditSystem] Credits low: ${this._remaining}/${this._config.totalCredits} remaining`);
-		}
+        /**
+         * Consume credits for an action.
+         * @returns true if credits were consumed, false if insufficient.
+         */
+        consumeCredits(
+                amount: number,
+                actionType: CreditActionType,
+                metadata?: { agentType?: string; sessionId?: string | undefined; description?: string },
+        ): boolean {
+                if (!this._config.enabled) return true; // No limit when disabled
+                if (this._remaining < amount) {
+                        logger.warn(`[CreditSystem] Insufficient credits: ${this._remaining} remaining, ${amount} requested for ${actionType}`);
+                        return false;
+                }
+                this._remaining -= amount;
+                this._log.push({
+                        timestamp: Date.now(),
+                        amount,
+                        actionType,
+                        metadata: metadata as Record<string, string> | undefined,
+                });
 
-		return true;
-	}
+                // Log when credits are getting low
+                if (this._remaining <= this._config.totalCredits * 0.2) {
+                        logger.info(`[CreditSystem] Credits low: ${this._remaining}/${this._config.totalCredits} remaining`);
+                }
 
-	/**
-	 * Add more credits to the allocation (e.g. when user upgrades).
-	 */
-	addCredits(amount: number): void {
-		this._remaining += amount;
-		this._config.totalCredits += amount;
-		logger.info(`[CreditSystem] Credits added: +${amount}, now ${this._remaining}/${this._config.totalCredits}`);
-	}
+                return true;
+        }
 
-	/**
-	 * Reset credits to the initial allocation.
-	 */
-	reset(): void {
-		this._remaining = this._config.totalCredits;
-		this._log.length = 0;
-	}
+        /**
+         * Add more credits to the allocation (e.g. when user upgrades).
+         */
+        addCredits(amount: number): void {
+                this._remaining += amount;
+                this._config.totalCredits += amount;
+                logger.info(`[CreditSystem] Credits added: +${amount}, now ${this._remaining}/${this._config.totalCredits}`);
+        }
 
-	/**
-	 * Get the consumption log for telemetry.
-	 */
-	getLog(): ReadonlyArray<{ timestamp: number; amount: number; actionType: CreditActionType }> {
-		return this._log;
-	}
+        /**
+         * Reset credits to the initial allocation.
+         */
+        reset(): void {
+                this._remaining = this._config.totalCredits;
+                this._log.length = 0;
+        }
 
-	/**
-	 * Get usage statistics.
-	 */
-	getStats(): { totalConsumed: number; byActionType: Record<string, number> } {
-		let totalConsumed = 0;
-		const byActionType: Record<string, number> = {};
-		for (const entry of this._log) {
-			totalConsumed += entry.amount;
-			byActionType[entry.actionType] = (byActionType[entry.actionType] ?? 0) + entry.amount;
-		}
-		return { totalConsumed, byActionType };
-	}
+        /**
+         * Get the consumption log for telemetry.
+         */
+        getLog(): ReadonlyArray<{ timestamp: number; amount: number; actionType: CreditActionType }> {
+                return this._log;
+        }
+
+        /**
+         * Get usage statistics.
+         */
+        getStats(): { totalConsumed: number; byActionType: Record<string, number> } {
+                let totalConsumed = 0;
+                const byActionType: Record<string, number> = {};
+                for (const entry of this._log) {
+                        totalConsumed += entry.amount;
+                        byActionType[entry.actionType] = (byActionType[entry.actionType] ?? 0) + entry.amount;
+                }
+                return { totalConsumed, byActionType };
+        }
+
+        canAfford(amount: number): boolean {
+                if (!this._config.enabled) return true;
+                return this._remaining >= amount;
+        }
+
+        setBudget(budget: unknown): void {
+                if (typeof budget === 'object' && budget !== null && 'totalCredits' in budget) {
+                        const b = budget as { totalCredits: number };
+                        this._config.totalCredits = b.totalCredits;
+                }
+        }
+
+        getBudget(): unknown {
+                return { totalCredits: this._config.totalCredits, remaining: this._remaining };
+        }
+
+        getUsageHistory(limit?: number): unknown[] {
+                const entries = [...this._log].reverse();
+                return limit ? entries.slice(0, limit) : entries;
+        }
+
+        resetSession(): void {
+                this.reset();
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -137,46 +166,51 @@ export class CreditSystem implements ICreditSystem {
  * Maps model prefixes to cheaper alternatives.
  */
 const MODEL_FALLBACK_TABLE: Record<string, string> = {
-	'anthropic/claude-opus': 'anthropic/claude-sonnet',
-	'anthropic/claude-sonnet': 'anthropic/claude-haiku',
-	'openai/gpt-4': 'openai/gpt-4o-mini',
-	'openai/gpt-4o': 'openai/gpt-4o-mini',
-	'meta/llama-3.3-70b': 'meta/llama-3.1-8b',
-	'nvidia/nemotron': 'nvidia/nemotron-3-nano-30b-a3b:free',
+        'anthropic/claude-opus': 'anthropic/claude-sonnet',
+        'anthropic/claude-sonnet': 'anthropic/claude-haiku',
+        'openai/gpt-4': 'openai/gpt-4o-mini',
+        'openai/gpt-4o': 'openai/gpt-4o-mini',
+        'meta/llama-3.3-70b': 'meta/llama-3.1-8b',
+        'nvidia/nemotron': 'nvidia/nemotron-3-nano-30b-a3b:free',
 };
 
 export class CostGovernor implements ICostGovernor {
-	constructor(
-		private readonly _creditSystem: CreditSystem,
-		private readonly _emergencyThreshold: number = 10,
-		private readonly _lowCreditPercent: number = 0.2,
-	) {}
+        constructor(
+                private readonly _creditSystem: CreditSystem,
+                private readonly _emergencyThreshold: number = 10,
+                private readonly _lowCreditPercent: number = 0.2,
+        ) {}
 
-	isEmergencyMode(): boolean {
-		if (!this._creditSystem.isEnabled()) return false;
-		return this._creditSystem.getCreditsRemaining() < this._emergencyThreshold;
-	}
+        isEmergencyMode(): boolean {
+                if (!this._creditSystem.isEnabled()) return false;
+                return this._creditSystem.getCreditsRemaining() < this._emergencyThreshold;
+        }
 
-	shouldAutoSwitchModel(): boolean {
-		if (!this._creditSystem.isEnabled()) return false;
-		const remaining = this._creditSystem.getCreditsRemaining();
-		const total = this._creditSystem.getTotalCredits();
-		return (remaining / total) < this._lowCreditPercent;
-	}
+        shouldAutoSwitchModel(): boolean {
+                if (!this._creditSystem.isEnabled()) return false;
+                const remaining = this._creditSystem.getCreditsRemaining();
+                const total = this._creditSystem.getTotalCredits();
+                return (remaining / total) < this._lowCreditPercent;
+        }
 
-	getCheaperModel(currentModel: string): string | undefined {
-		// Try exact match first
-		if (MODEL_FALLBACK_TABLE[currentModel]) {
-			return MODEL_FALLBACK_TABLE[currentModel];
-		}
-		// Try prefix match
-		for (const [prefix, fallback] of Object.entries(MODEL_FALLBACK_TABLE)) {
-			if (currentModel.startsWith(prefix)) {
-				return fallback;
-			}
-		}
-		return undefined;
-	}
+        getCheaperModel(currentModel: string): string | undefined {
+                // Try exact match first
+                if (MODEL_FALLBACK_TABLE[currentModel]) {
+                        return MODEL_FALLBACK_TABLE[currentModel];
+                }
+                // Try prefix match
+                for (const [prefix, fallback] of Object.entries(MODEL_FALLBACK_TABLE)) {
+                        if (currentModel.startsWith(prefix)) {
+                                return fallback;
+                        }
+                }
+                return undefined;
+        }
+
+        isActionAllowed(_actionType: CreditActionType): boolean {
+                // In emergency mode, block all actions to prevent further credit drain
+                return !this.isEmergencyMode();
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -187,21 +221,21 @@ let _creditSystem: CreditSystem | undefined;
 let _costGovernor: CostGovernor | undefined;
 
 export function getCreditSystem(): CreditSystem {
-	if (!_creditSystem) {
-		_creditSystem = new CreditSystem();
-	}
-	return _creditSystem;
+        if (!_creditSystem) {
+                _creditSystem = new CreditSystem();
+        }
+        return _creditSystem;
 }
 
 export function getCostGovernor(): CostGovernor {
-	if (!_costGovernor) {
-		_costGovernor = new CostGovernor(getCreditSystem());
-	}
-	return _costGovernor;
+        if (!_costGovernor) {
+                _costGovernor = new CostGovernor(getCreditSystem());
+        }
+        return _costGovernor;
 }
 
 export function initCostGovernor(config?: Partial<ICreditSystemConfig>): { creditSystem: CreditSystem; costGovernor: CostGovernor } {
-	_creditSystem = new CreditSystem(config);
-	_costGovernor = new CostGovernor(_creditSystem);
-	return { creditSystem: _creditSystem, costGovernor: _costGovernor };
+        _creditSystem = new CreditSystem(config);
+        _costGovernor = new CostGovernor(_creditSystem);
+        return { creditSystem: _creditSystem, costGovernor: _costGovernor };
 }

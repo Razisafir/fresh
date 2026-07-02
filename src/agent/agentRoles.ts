@@ -91,13 +91,13 @@ export interface IAgentRoleConfig {
  * (per the tool registry spec in `src/types/tools.ts`):
  *   - read_file
  *   - list_directory
- *   - search_codebase
+ *   - search_code
  *   - web_fetch
  */
 const READ_ONLY_TOOL_NAMES: readonly string[] = [
         'read_file',
         'list_directory',
-        'search_codebase',
+        'search_code',
         'web_fetch',
 ] as const;
 

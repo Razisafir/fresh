@@ -122,14 +122,14 @@ export function assertWithinWorkspace(
  * Used for IPC input validation to prevent arbitrary tool execution.
  *
  * Round 2C test-audit fix: the old list referenced dropped tool names
- * (`create_directory`, `search_files`, `search_codebase`, `web_search`).
+ * (`create_directory`, `search_files`, `search_code`, `web_search`).
  * Updated to match the v0.1 built-in tool set per 02_ARCHITECTURE.md §4.3.
  */
 export function validateToolName(name: string): boolean {
         const ALLOWED_TOOLS = new Set([
-                // v0.1 built-in tools (per 02_ARCHITECTURE.md §4.3)
+                // v0.1 built-in tools (per 02_ARCHITECTURE.md §4.3 + create_directory)
                 'read_file', 'write_file', 'edit_file', 'list_directory',
-                'run_command', 'search_code', 'web_fetch',
+                'create_directory', 'run_command', 'search_code', 'web_fetch',
         ]);
         return ALLOWED_TOOLS.has(name);
 }
@@ -141,6 +141,7 @@ export function validateMcpMethod(method: string): boolean {
         const ALLOWED_METHODS = new Set([
                 'initialize', 'tools/list', 'tools/call',
                 'resources/list', 'resources/read',
+                'ping',
         ]);
         return ALLOWED_METHODS.has(method);
 }
