@@ -125,6 +125,32 @@ html, body {
   font-weight: 700;
 }
 
+.credit-badge {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  background: var(--bg-base);
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  cursor: default;
+}
+
+.credit-badge.warning {
+  color: var(--warning);
+  border-color: var(--warning);
+}
+
+.credit-badge.emergency {
+  color: var(--error);
+  border-color: var(--error);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .title {
   font-size: var(--font-size-md);
   font-weight: 600;
@@ -414,6 +440,22 @@ html, body {
   margin-bottom: var(--space-xs);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
+}
+
+.plan-summary {
+  background: rgba(0,0,0,0.2);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  max-height: 250px;
+  overflow-y: auto;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.plan-summary p {
+  margin-bottom: var(--space-xs);
 }
 
 .plan-actions {
