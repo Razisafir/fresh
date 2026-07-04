@@ -98,7 +98,7 @@ export class TogetherProvider implements IConstructAIProvider {
                         this._listeners.activeModel.forEach(l => l(found));
                         return true;
                 }
-                logger.warn(`[TogetherProvider] Model not found: ${modelId}`);
+                logger.verbose(`[TogetherProvider] Model not found: ${modelId} (provider not configured — no API key)`);
                 return false;
         }
 

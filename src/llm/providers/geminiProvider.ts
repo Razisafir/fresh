@@ -97,7 +97,7 @@ export class GeminiProvider implements IConstructAIProvider {
                         this._listeners.activeModel.forEach(l => l(found));
                         return true;
                 }
-                logger.warn(`[GeminiProvider] Model not found: ${modelId}`);
+                logger.verbose(`[GeminiProvider] Model not found: ${modelId} (provider not configured — no API key)`);
                 return false;
         }
 

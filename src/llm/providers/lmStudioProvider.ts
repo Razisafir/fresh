@@ -96,7 +96,7 @@ export class LmStudioProvider implements IConstructAIProvider {
                         this._listeners.activeModel.forEach(l => l(found));
                         return true;
                 }
-                logger.warn(`[LmStudioProvider] Model not found: ${modelId}`);
+                logger.verbose(`[LmStudioProvider] Model not found: ${modelId} (local provider may not be running)`);
                 return false;
         }
 

@@ -21,85 +21,85 @@
 import { logger } from '../util/logger';
 
 export interface IRateLimitConfig {
-	/** Maximum number of commands allowed within the window. Default: 10. */
-	maxCommands: number;
-	/** Sliding window duration in milliseconds. Default: 30_000 (30 seconds). */
-	windowMs: number;
+        /** Maximum number of commands allowed within the window. Default: 10. */
+        maxCommands: number;
+        /** Sliding window duration in milliseconds. Default: 30_000 (30 seconds). */
+        windowMs: number;
 }
 
 const DEFAULT_CONFIG: IRateLimitConfig = {
-	maxCommands: 10,
-	windowMs: 30_000,
+        maxCommands: 20,
+        windowMs: 60_000,
 };
 
 export class CommandRateLimiter {
-	private readonly config: IRateLimitConfig;
-	private readonly timestamps: number[] = [];
+        private readonly config: IRateLimitConfig;
+        private readonly timestamps: number[] = [];
 
-	constructor(config?: Partial<IRateLimitConfig>) {
-		this.config = { ...DEFAULT_CONFIG, ...config };
-	}
+        constructor(config?: Partial<IRateLimitConfig>) {
+                this.config = { ...DEFAULT_CONFIG, ...config };
+        }
 
-	/**
-	 * Check if a new command is allowed under the rate limit.
-	 * If allowed, records the timestamp and returns true.
-	 * If not allowed, returns false with the time to wait.
-	 */
-	tryAcquire(): { allowed: true } | { allowed: false; retryAfterMs: number } {
-		const now = Date.now();
-		const windowStart = now - this.config.windowMs;
+        /**
+         * Check if a new command is allowed under the rate limit.
+         * If allowed, records the timestamp and returns true.
+         * If not allowed, returns false with the time to wait.
+         */
+        tryAcquire(): { allowed: true } | { allowed: false; retryAfterMs: number } {
+                const now = Date.now();
+                const windowStart = now - this.config.windowMs;
 
-		// Remove timestamps outside the current window
-		while (this.timestamps.length > 0 && this.timestamps[0] < windowStart) {
-			this.timestamps.shift();
-		}
+                // Remove timestamps outside the current window
+                while (this.timestamps.length > 0 && this.timestamps[0] < windowStart) {
+                        this.timestamps.shift();
+                }
 
-		if (this.timestamps.length >= this.config.maxCommands) {
-			const oldestInWindow = this.timestamps[0];
-			const retryAfterMs = oldestInWindow + this.config.windowMs - now;
-			logger.warn(
-				`[CommandRateLimiter] Rate limit exceeded: ${this.timestamps.length}/${this.config.maxCommands} ` +
-				`commands in the last ${this.config.windowMs / 1000}s. Retry after ${Math.ceil(retryAfterMs / 1000)}s.`,
-			);
-			return { allowed: false, retryAfterMs };
-		}
+                if (this.timestamps.length >= this.config.maxCommands) {
+                        const oldestInWindow = this.timestamps[0];
+                        const retryAfterMs = oldestInWindow + this.config.windowMs - now;
+                        logger.warn(
+                                `[CommandRateLimiter] Rate limit exceeded: ${this.timestamps.length}/${this.config.maxCommands} ` +
+                                `commands in the last ${this.config.windowMs / 1000}s. Retry after ${Math.ceil(retryAfterMs / 1000)}s.`,
+                        );
+                        return { allowed: false, retryAfterMs };
+                }
 
-		this.timestamps.push(now);
-		return { allowed: true };
-	}
+                this.timestamps.push(now);
+                return { allowed: true };
+        }
 
-	/**
-	 * Get the current rate limit status for display.
-	 */
-	getStatus(): { commandsInWindow: number; maxCommands: number; windowMs: number } {
-		const now = Date.now();
-		const windowStart = now - this.config.windowMs;
-		const inWindow = this.timestamps.filter(t => t >= windowStart).length;
-		return {
-			commandsInWindow: inWindow,
-			maxCommands: this.config.maxCommands,
-			windowMs: this.config.windowMs,
-		};
-	}
+        /**
+         * Get the current rate limit status for display.
+         */
+        getStatus(): { commandsInWindow: number; maxCommands: number; windowMs: number } {
+                const now = Date.now();
+                const windowStart = now - this.config.windowMs;
+                const inWindow = this.timestamps.filter(t => t >= windowStart).length;
+                return {
+                        commandsInWindow: inWindow,
+                        maxCommands: this.config.maxCommands,
+                        windowMs: this.config.windowMs,
+                };
+        }
 
-	/**
-	 * Reset the rate limiter (e.g. on session reset).
-	 */
-	reset(): void {
-		this.timestamps.length = 0;
-	}
+        /**
+         * Reset the rate limiter (e.g. on session reset).
+         */
+        reset(): void {
+                this.timestamps.length = 0;
+        }
 
-	/**
-	 * Update the rate limit configuration.
-	 */
-	updateConfig(config: Partial<IRateLimitConfig>): void {
-		if (config.maxCommands !== undefined) {
-			this.config.maxCommands = config.maxCommands;
-		}
-		if (config.windowMs !== undefined) {
-			this.config.windowMs = config.windowMs;
-		}
-	}
+        /**
+         * Update the rate limit configuration.
+         */
+        updateConfig(config: Partial<IRateLimitConfig>): void {
+                if (config.maxCommands !== undefined) {
+                        this.config.maxCommands = config.maxCommands;
+                }
+                if (config.windowMs !== undefined) {
+                        this.config.windowMs = config.windowMs;
+                }
+        }
 }
 
 /**

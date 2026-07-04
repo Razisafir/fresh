@@ -100,7 +100,7 @@ export class MistralProvider implements IConstructAIProvider {
                         this._listeners.activeModel.forEach(l => l(found));
                         return true;
                 }
-                logger.warn(`[MistralProvider] Model not found: ${modelId}`);
+                logger.verbose(`[MistralProvider] Model not found: ${modelId} (provider not configured — no API key)`);
                 return false;
         }
 

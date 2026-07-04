@@ -102,7 +102,7 @@ export class GroqProvider implements IConstructAIProvider {
                         this._listeners.activeModel.forEach(l => l(found));
                         return true;
                 }
-                logger.warn(`[GroqProvider] Model not found: ${modelId}`);
+                logger.verbose(`[GroqProvider] Model not found: ${modelId} (provider not configured — no API key)`);
                 return false;
         }
 

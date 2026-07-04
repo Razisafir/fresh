@@ -180,6 +180,7 @@ export class NvidiaProvider implements IConstructAIProvider, Disposable {
                                 headers: {
                                         'Authorization': `Bearer ${key}`,
                                 },
+                                signal: AbortSignal.timeout(10_000),
                         });
                         if (response.ok) {
                                 this._setStatus(ProviderStatus.Available);
@@ -219,16 +220,24 @@ export class NvidiaProvider implements IConstructAIProvider, Disposable {
                                                 'Accept': 'text/event-stream',
                                         },
                                         body: JSON.stringify(body),
-                                        signal: options?.signal,
+                                        signal: options?.signal ?? AbortSignal.timeout(120_000),
                                 });
 
                                 if (response.status === 429) {
                                         const retryAfter = response.headers.get('retry-after');
                                         const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : 2000 * (retries + 1);
-                                        logger.warn(`[NvidiaProvider] Rate limited, retrying in ${waitMs}ms (attempt ${retries + 1}/${MAX_RETRIES})`);
+                                        logger.warn(`[NvidiaProvider] Rate limited (429), retrying in ${waitMs}ms (attempt ${retries + 1}/${MAX_RETRIES})`);
                                         await new Promise(r => setTimeout(r, waitMs));
                                         retries++;
                                         continue;
+                                }
+
+                                // NVIDIA returns 404 when the model name is invalid or the endpoint path is wrong
+                                if (response.status === 404) {
+                                        const errorText = await response.text().catch(() => 'unknown');
+                                        logger.error(`[NvidiaProvider] 404 Not Found — model '${this._activeModel?.id ?? DEFAULT_NVIDIA_MODEL}' may be invalid or unavailable. Response: ${errorText.slice(0, 200)}`);
+                                        yield { type: 'error', text: `NVIDIA API error (404): Model '${this._activeModel?.id ?? DEFAULT_NVIDIA_MODEL}' not found. Check model name at https://build.nvidia.com/explore/reasoning` };
+                                        return;
                                 }
 
                                 if (response.status === 529 || response.status >= 500) {
@@ -246,6 +255,14 @@ export class NvidiaProvider implements IConstructAIProvider, Disposable {
 
                                 if (!response.ok) {
                                         const errorText = await response.text().catch(() => 'unknown');
+                                        // Check for ResourceExhausted in the error body (NVIDIA rate limit)
+                                        if (errorText.includes('ResourceExhausted') || errorText.includes('rate limit') || errorText.includes('rate_limit')) {
+                                                const waitMs = 4000 * (retries + 1);
+                                                logger.warn(`[NvidiaProvider] ResourceExhausted / rate limit in ${response.status} response. Retrying in ${waitMs}ms (attempt ${retries + 1}/${MAX_RETRIES})`);
+                                                await new Promise(r => setTimeout(r, waitMs));
+                                                retries++;
+                                                continue;
+                                        }
                                         yield { type: 'error', text: `NVIDIA API error (${response.status}): ${errorText}` };
                                         return;
                                 }
@@ -560,14 +577,14 @@ export class NvidiaProvider implements IConstructAIProvider, Disposable {
         }
 
         async setActiveModel(modelId: string): Promise<boolean> {
-                this._activeModel = {
-                        id: modelId,
-                        displayName: modelId.split('/').pop() ?? modelId,
-                        provider: 'nvidia-nim',
-                        contextWindowTokens: 128_000,
-                        supportsTools: true,
-                        supportsStreaming: true,
-                };
+                // Validate model exists in known models before setting
+                const models = await this.listModels();
+                const found = models.find(m => m.id === modelId);
+                if (!found) {
+                        logger.warn(`[NvidiaProvider] Model not found: ${modelId}. Available: ${models.map(m => m.id).join(', ')}`);
+                        return false;
+                }
+                this._activeModel = found;
                 this._onDidChangeActiveModel.fire(this._activeModel);
                 return true;
         }
